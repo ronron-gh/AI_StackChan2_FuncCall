@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-extern String json_FuncCallString;
+extern String json_ChatString;
 String exec_calledFunc(DynamicJsonDocument doc);
 
 #endif //_FUNCTION_CALL_H

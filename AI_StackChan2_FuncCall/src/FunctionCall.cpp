@@ -15,7 +15,7 @@ void powerOffTimerCallback(TimerHandle_t xTimer);
 static String stackchan_timer(int32_t time, const char* action);
 static String stackchan_timer_change_period(int32_t time);
 
-String json_FuncCallString = 
+String json_ChatString = 
 "{\"model\": \"gpt-3.5-turbo-0613\","
 "\"messages\": [{\"role\": \"user\", \"content\": \"\"}],"
 "\"functions\": ["

@@ -203,7 +203,7 @@ static const char ROLE_HTML[] PROGMEM = R"KEWL(
 String speech_text = "";
 String speech_text_buffer = "";
 DynamicJsonDocument chat_doc(1024*10);
-String json_ChatString = "{\"model\": \"gpt-3.5-turbo-0613\",\"messages\": [{\"role\": \"user\", \"content\": \"""\"}]}";
+//String json_ChatString = "{\"model\": \"gpt-3.5-turbo-0613\",\"messages\": [{\"role\": \"user\", \"content\": \"""\"}]}";
 String Role_JSON = "";
 
 bool init_chat_doc(const char *data)
@@ -415,10 +415,8 @@ void handle_chat() {
 
 void exec_chatGPT(String text) {
   static String response = "";
-  //Serial.println(InitBuffer);
-  //init_chat_doc(InitBuffer.c_str());
-  Serial.println(json_FuncCallString);
-  init_chat_doc(json_FuncCallString.c_str());
+  Serial.println(InitBuffer);
+  init_chat_doc(InitBuffer.c_str());
 
   // 質問をチャット履歴に追加
   chatHistory.push_back(text);
@@ -1208,7 +1206,7 @@ void loop()
         avatar.setSpeechText("御用でしょうか？");
         M5.Speaker.end();
         String ret;
-#if 1
+
         if(OPENAI_API_KEY != STT_API_KEY){
           Serial.println("Google STT");
           ret = SpeechToText(true);
@@ -1216,9 +1214,6 @@ void loop()
           Serial.println("Whisper STT");
           ret = SpeechToText(false);
         }
-#else
-ret = "テスト";
-#endif
 
 #ifdef USE_SERVO
         servo_home = prev_servo_home;
