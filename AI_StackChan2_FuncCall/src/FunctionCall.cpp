@@ -51,10 +51,47 @@ String json_ChatString =
       "},"
       "\"required\": [\"time\"]"
     "}"
+  "},"
+  "{"
+    "\"name\": \"get_time\","
+    "\"description\": \"現在の時刻を取得する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {}"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"listen_to_you\","
+    "\"description\": \"相手がこれから話すことを聞き取る。例えば、「これから言うことをメモして」と言われた時や、相手の発言を促したいときにこの関数を使用する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {}"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"save_note\","
+    "\"description\": \"メモを保存する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {"
+        "\"text\":{"
+          "\"type\": \"string\","
+          "\"description\": \"メモの内容。\""
+        "}"
+      "}"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"read_note\","
+    "\"description\": \"メモを読み上げる。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {}"
+    "}"
   "}"
-"]"
+"],"
+"\"function_call\":\"auto\""
 "}";
-
 
 
 void alarmTimerCallback(TimerHandle_t _xTimer){
@@ -122,7 +159,79 @@ String stackchan_timer_change_period(int32_t time){
   return response;
 }
 
-String exec_calledFunc(DynamicJsonDocument doc){
+String get_time(){
+  String response = "";
+  struct tm timeInfo; 
+
+  if (getLocalTime(&timeInfo)) {                            // timeinfoに現在時刻を格納
+    response = String(timeInfo.tm_hour) + "時" + String(timeInfo.tm_min) + "分です。";
+  }
+  else{
+    response = "時刻取得に失敗しました。";
+  }
+  return response;
+}
+
+extern bool servo_home;
+extern String OPENAI_API_KEY;
+extern String STT_API_KEY;
+extern String SpeechToText(bool isGoogle);
+
+String listen_to_you(){
+  M5.Speaker.tone(1000, 100);
+  delay(200);
+  M5.Speaker.end();
+  bool prev_servo_home = servo_home;
+//#ifdef USE_SERVO
+  servo_home = true;
+//#endif
+  avatar.setExpression(Expression::Happy);
+  avatar.setSpeechText("どうぞ話してください");
+  M5.Speaker.end();
+  String ret;
+
+  if(OPENAI_API_KEY != STT_API_KEY){
+    Serial.println("Google STT");
+    ret = SpeechToText(true);
+  } else {
+    Serial.println("Whisper STT");
+    ret = SpeechToText(false);
+  }
+
+//#ifdef USE_SERVO
+  servo_home = prev_servo_home;
+//#endif
+  Serial.println("音声認識終了");
+  if(ret != "") {
+    Serial.println(ret);
+
+  } else {
+    Serial.println("音声認識失敗");
+    avatar.setExpression(Expression::Sad);
+    avatar.setSpeechText("聞き取れませんでした");
+    delay(2000);
+
+  } 
+
+  avatar.setSpeechText("");
+  avatar.setExpression(Expression::Neutral);
+  M5.Speaker.begin();
+
+  return ret;
+}
+
+String note = "";
+String save_note(const char* text){
+  note = String(text);
+  String response = "メモを保存しました。";
+  return response;
+}
+
+String read_note(){
+  return String("メモの内容は次の通り。") + note;
+}
+
+String exec_calledFunc(DynamicJsonDocument doc, String* calledFunc){
   String response = "";
   const char* name = doc["choices"][0]["message"]["function_call"]["name"];
   const char* args = doc["choices"][0]["message"]["function_call"]["arguments"];
@@ -142,6 +251,8 @@ String exec_calledFunc(DynamicJsonDocument doc){
     avatar.setSpeechText("");
     avatar.setExpression(Expression::Neutral);
   }else{
+    *calledFunc = String(name);
+
     if(strcmp(name, "stackchan_timer") == 0){
       const int time = argsDoc["time"];
       const char* action = argsDoc["action"];
@@ -153,6 +264,20 @@ String exec_calledFunc(DynamicJsonDocument doc){
     else if(strcmp(name, "stackchan_timer_change_period") == 0){
       const int time = argsDoc["time"];
       response = stackchan_timer_change_period(time);    
+    }
+    else if(strcmp(name, "get_time") == 0){
+      response = get_time();    
+    }
+    else if(strcmp(name, "listen_to_you") == 0){
+      response = listen_to_you();    
+    }
+    else if(strcmp(name, "save_note") == 0){
+      const char* text = argsDoc["text"];
+      Serial.println(text);
+      response = save_note(text);
+    }
+    else if(strcmp(name, "read_note") == 0){
+      response = read_note();    
     }
   }
 

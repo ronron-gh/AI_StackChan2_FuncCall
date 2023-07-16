@@ -21,19 +21,21 @@
 #include <ArduinoJson.h>
 #include <ESP32WebServer.h>
 #include <ESPmDNS.h>
-#include <deque>
+//#include <deque>
 #include "AudioWhisper.h"
 #include "Whisper.h"
 #include "Audio.h"
 #include "CloudSpeechClient.h"
 
 #include "FunctionCall.h"
+#include "ChatHistory.h"
 
 // 保存する質問と回答の最大数
-const int MAX_HISTORY = 5;
+//const int MAX_HISTORY = 5;
+const int MAX_HISTORY = 20;
 
 // 過去の質問と回答を保存するデータ構造
-std::deque<String> chatHistory;
+ChatHistory chatHistory(MAX_HISTORY);
 
 #define USE_SDCARD
 #define WIFI_SSID "SET YOUR WIFI SSID"
@@ -60,6 +62,12 @@ std::deque<String> chatHistory;
   #define SERVO_PIN_Y 17
 #endif
 #endif
+
+// NTP接続情報　NTP connection information.
+const char* NTPSRV      = "ntp.jst.mfeed.ad.jp";    // NTPサーバーアドレス NTP server address.
+const long  GMT_OFFSET  = 9 * 3600;                 // GMT-TOKYO(時差９時間）9 hours time difference.
+const int   DAYLIGHT_OFFSET = 0;                    // サマータイム設定なし No daylight saving time setting
+
 
 /// 関数プロトタイプ宣言 /// 
 void exec_chatGPT(String text);
@@ -204,7 +212,7 @@ String speech_text = "";
 String speech_text_buffer = "";
 DynamicJsonDocument chat_doc(1024*10);
 //String json_ChatString = "{\"model\": \"gpt-3.5-turbo-0613\",\"messages\": [{\"role\": \"user\", \"content\": \"""\"}]}";
-String Role_JSON = "";
+//String Role_JSON = "";
 
 bool init_chat_doc(const char *data)
 {
@@ -306,8 +314,8 @@ String https_post_json(const char* url, const char* json_string, const char* roo
 }
 
 
-String chatGpt(String json_string) {
-  String response = "";;
+String chatGpt(String json_string, String* calledFunc) {
+  String response = "";
   avatar.setExpression(Expression::Doubt);
   avatar.setSpeechText("考え中…");
   String ret = https_post_json("https://api.openai.com/v1/chat/completions", json_string.c_str(), root_ca_openai);
@@ -328,15 +336,16 @@ String chatGpt(String json_string) {
       avatar.setExpression(Expression::Neutral);
     }else{
       const char* data = doc["choices"][0]["message"]["content"];
-
+      
       // content = nullならfunction call
       if(data == 0){
-        response = exec_calledFunc(doc);
+        response = exec_calledFunc(doc, calledFunc);
       }
       else{
         Serial.println(data);
         response = String(data);
         std::replace(response.begin(),response.end(),'\n',' ');
+        *calledFunc = String("");
       }
     }
   } else {
@@ -363,104 +372,79 @@ void handle_chat() {
 
   exec_chatGPT(text);
 
-#if 0
-  Serial.println(InitBuffer);
-  init_chat_doc(InitBuffer.c_str());
-  // 質問をチャット履歴に追加
-  chatHistory.push_back(text);
-   // チャット履歴が最大数を超えた場合、古い質問と回答を削除
-  if (chatHistory.size() > MAX_HISTORY * 2)
-  {
-    chatHistory.pop_front();
-    chatHistory.pop_front();
-  }
-
-  for (int i = 0; i < chatHistory.size(); i++)
-  {
-    JsonArray messages = chat_doc["messages"];
-    JsonObject systemMessage1 = messages.createNestedObject();
-    if(i % 2 == 0) {
-      systemMessage1["role"] = "user";
-    } else {
-      systemMessage1["role"] = "assistant";
-    }
-    systemMessage1["content"] = chatHistory[i];
-  }
-
-  String json_string;
-  serializeJson(chat_doc, json_string);
-  if(speech_text=="" && speech_text_buffer == "") {
-    response = chatGpt(json_string);
-    speech_text = response;
-    // 返答をチャット履歴に追加
-    chatHistory.push_back(response);
-  } else {
-    response = "busy";
-  }
-  // Serial.printf("chatHistory.max_size %d \n",chatHistory.max_size());
-  // Serial.printf("chatHistory.size %d \n",chatHistory.size());
-  // for (int i = 0; i < chatHistory.size(); i++)
-  // {
-  //   Serial.print(i);
-  //   Serial.println("= "+chatHistory[i]);
-  // }
-  serializeJsonPretty(chat_doc, json_string);
-  Serial.println("====================");
-  Serial.println(json_string);
-  Serial.println("====================");
-#endif
-
   server.send(200, "text/html", String(HEAD)+String("<body>")+response+String("</body>"));
 }
 
+
+#define MAX_REQUEST_COUNT  (10)
 void exec_chatGPT(String text) {
   static String response = "";
-  Serial.println(InitBuffer);
-  init_chat_doc(InitBuffer.c_str());
+  String calledFunc = "";
+  String funcCallMode = "auto";
+
+  //Serial.println(InitBuffer);
+  //init_chat_doc(InitBuffer.c_str());
 
   // 質問をチャット履歴に追加
-  chatHistory.push_back(text);
-   // チャット履歴が最大数を超えた場合、古い質問と回答を削除
-  if (chatHistory.size() > MAX_HISTORY * 2)
-  {
-    chatHistory.pop_front();
-    chatHistory.pop_front();
-  }
+  chatHistory.push_back(String("user"), String(""), text);
 
-  for (int i = 0; i < chatHistory.size(); i++)
+  // functionの実行が要求されなくなるまで繰り返す
+  for (int reqCount = 0; reqCount < MAX_REQUEST_COUNT; reqCount++)
   {
-    JsonArray messages = chat_doc["messages"];
-    JsonObject systemMessage1 = messages.createNestedObject();
-    if(i % 2 == 0) {
-      systemMessage1["role"] = "user";
-    } else {
-      systemMessage1["role"] = "assistant";
+    init_chat_doc(InitBuffer.c_str());
+
+    if(reqCount == (MAX_REQUEST_COUNT - 1)){
+      funcCallMode = String("none");
     }
-    systemMessage1["content"] = chatHistory[i];
-  }
 
-  String json_string;
-  serializeJson(chat_doc, json_string);
-  if(speech_text=="" && speech_text_buffer == "") {
-    response = chatGpt(json_string);
-    speech_text = response;
+    for (int i = 0; i < chatHistory.get_size(); i++)
+    {
+      JsonArray messages = chat_doc["messages"];
+      JsonObject systemMessage1 = messages.createNestedObject();
+
+      if(chatHistory.get_role(i).equals(String("function"))){
+        systemMessage1["role"] = chatHistory.get_role(i);
+        systemMessage1["name"] = chatHistory.get_funcName(i);
+        systemMessage1["content"] = chatHistory.get_content(i);
+      }
+      else{
+        systemMessage1["role"] = chatHistory.get_role(i);
+        systemMessage1["content"] = chatHistory.get_content(i);
+      }
+
+    }
+
+    String json_string;
+    serializeJson(chat_doc, json_string);
+
+    //serializeJsonPretty(chat_doc, json_string);
+    Serial.println("====================");
+    Serial.println(json_string);
+    Serial.println("====================");
+
+
+    response = chatGpt(json_string, &calledFunc);
+
     // 返答をチャット履歴に追加
-    chatHistory.push_back(response);
-  } else {
-    response = "busy";
-  }
-  // Serial.printf("chatHistory.max_size %d \n",chatHistory.max_size());
-  // Serial.printf("chatHistory.size %d \n",chatHistory.size());
-  // for (int i = 0; i < chatHistory.size(); i++)
-  // {
-  //   Serial.print(i);
-  //   Serial.println("= "+chatHistory[i]);
-  // }
-  serializeJsonPretty(chat_doc, json_string);
-  Serial.println("====================");
-  Serial.println(json_string);
-  Serial.println("====================");
+    if(calledFunc == ""){
+      chatHistory.push_back(String("assistant"), String(""), response);
+    }
+    else{
+      chatHistory.push_back(String("function"), calledFunc, response);      
+    }
 
+    if(calledFunc == ""){
+      if(speech_text=="" && speech_text_buffer == "") {
+        speech_text = response;
+        Serial.println("Chat End");
+      } else {
+        response = "busy";
+      }
+
+      break;
+    }
+
+  }
 }
 
 /*
@@ -565,7 +549,7 @@ void handle_role_set() {
   InitBuffer="";
   serializeJson(chat_doc, InitBuffer);
   Serial.println("InitBuffer = " + InitBuffer);
-  Role_JSON = InitBuffer;
+  //Role_JSON = InitBuffer;
 
   // JSONデータをspiffsへ出力する
   save_json();
@@ -869,6 +853,28 @@ String SpeechToText(bool isGoogle){
   return ret;
 }
 
+
+void time_sync(const char* ntpsrv, long gmt_offset, int daylight_offset) {
+  struct tm timeInfo; 
+  char buf[60];
+
+  configTime(gmt_offset, daylight_offset, ntpsrv);          // NTPサーバと同期
+
+  if (getLocalTime(&timeInfo)) {                            // timeinfoに現在時刻を格納
+    Serial.print("NTP : ");                                 // シリアルモニターに表示
+    Serial.println(ntpsrv);                                 // シリアルモニターに表示
+
+    sprintf(buf, "%04d-%02d-%02d %02d:%02d:%02d\n",     // 表示内容の編集
+    timeInfo.tm_year + 1900, timeInfo.tm_mon + 1, timeInfo.tm_mday,
+    timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_sec);
+
+    Serial.println(buf);                                    // シリアルモニターに表示
+  }
+  else {
+    Serial.print("NTP Sync Error ");                        // シリアルモニターに表示
+  }
+}
+
 void setup()
 {
   auto cfg = M5.config();
@@ -1082,8 +1088,25 @@ void setup()
         Serial.println("Failed to deserialize JSON");
         init_chat_doc(json_ChatString.c_str());
       }
+      else{
+        //const char* role = chat_doc["messages"][1]["content"];
+        String role = String((const char*)chat_doc["messages"][1]["content"]);
+        
+        Serial.println(role);
+
+        if (role != "") {
+          init_chat_doc(json_ChatString.c_str());
+          JsonArray messages = chat_doc["messages"];
+          JsonObject systemMessage1 = messages.createNestedObject();
+          systemMessage1["role"] = "system";
+          systemMessage1["content"] = role;
+          //serializeJson(chat_doc, InitBuffer);
+        } else {
+          init_chat_doc(json_ChatString.c_str());
+        }
+      }
       serializeJson(chat_doc, InitBuffer);
-      Role_JSON = InitBuffer;
+      //Role_JSON = InitBuffer;
       String json_str; 
       serializeJsonPretty(chat_doc, json_str);  // 文字列をシリアルポートに出力する
       Serial.println(json_str);
@@ -1117,6 +1140,8 @@ void setup()
   box_stt.setupBox(0, 0, M5.Display.width(), 60);
   box_BtnA.setupBox(0, 100, 40, 60);
   box_BtnC.setupBox(280, 100, 40, 60);
+
+  time_sync(NTPSRV, GMT_OFFSET, DAYLIGHT_OFFSET);           // 時刻同期
 }
 
 String random_words[18] = {"あなたは誰","楽しい","怒った","可愛い","悲しい","眠い","ジョークを言って","泣きたい","怒ったぞ","こんにちは","お疲れ様","詩を書いて","疲れた","お腹空いた","嫌いだ","苦しい","俳句を作って","歌をうたって"};
@@ -1218,6 +1243,8 @@ void loop()
 #ifdef USE_SERVO
         servo_home = prev_servo_home;
 #endif
+        M5.Speaker.begin();
+        
         Serial.println("音声認識終了");
         Serial.println("音声認識結果");
         if(ret != "") {
@@ -1233,7 +1260,7 @@ void loop()
           avatar.setSpeechText("");
           avatar.setExpression(Expression::Neutral);
         } 
-        M5.Speaker.begin();
+        //M5.Speaker.begin();
       }
 #ifdef USE_SERVO
       if (box_servo.contain(t.x, t.y))
