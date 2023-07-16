@@ -11,7 +11,7 @@ OpenAIのFunction Callingを使って、robo8080さんの[AIｽﾀｯｸﾁｬ�
 ### デモ : メモ機能
 「これから言うことをメモして」  
 「メモを読み上げて」  
-といった指示に対応できます。[Twitter]()に動画を公開しています。
+といった指示に対応できます。[Twitter](https://twitter.com/motoh_tw/status/1680476893286477824)に動画を公開しています。
 
 ### Function Callingに登録した関数
 FunctionCall.cppのJSONに関数を定義しています。  
