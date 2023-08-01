@@ -20,12 +20,13 @@
 #include "rootCAgoogle.h"
 #include <ArduinoJson.h>
 #include <ESP32WebServer.h>
-#include <ESPmDNS.h>
+//#include <ESPmDNS.h>
 //#include <deque>
 #include "AudioWhisper.h"
 #include "Whisper.h"
 #include "Audio.h"
 #include "CloudSpeechClient.h"
+#include "WakeWord.h"
 
 #include "FunctionCall.h"
 #include "ChatHistory.h"
@@ -71,6 +72,7 @@ const int   DAYLIGHT_OFFSET = 0;                    // サマータイム設定�
 
 /// 関数プロトタイプ宣言 /// 
 void exec_chatGPT(String text);
+void check_heap_free_size(void);
 
 
 /// set M5Speaker virtual channel (0-7)
@@ -97,6 +99,8 @@ String TTS_SPEAKER_NO = "3";
 String TTS_SPEAKER = "&speaker=";
 String TTS_PARMS = TTS_SPEAKER + TTS_SPEAKER_NO;
 
+//---------------------------------------------
+bool wakeword_is_enable = false;
 //---------------------------------------------
 // C++11 multiline string constants are neato...
 static const char HEAD[] PROGMEM = R"KEWL(
@@ -210,7 +214,9 @@ static const char ROLE_HTML[] PROGMEM = R"KEWL(
 
 String speech_text = "";
 String speech_text_buffer = "";
-DynamicJsonDocument chat_doc(1024*10);
+//DynamicJsonDocument chat_doc(1024*10);
+DynamicJsonDocument chat_doc(1024*30);
+
 //String json_ChatString = "{\"model\": \"gpt-3.5-turbo-0613\",\"messages\": [{\"role\": \"user\", \"content\": \"""\"}]}";
 //String Role_JSON = "";
 
@@ -891,6 +897,14 @@ void setup()
     for (;;) { delay(1000); }
   }
 
+  {
+    auto micConfig = M5.Mic.config();
+    micConfig.stereo = false;
+    micConfig.sample_rate = 16000;
+    M5.Mic.config(micConfig);
+  }
+  M5.Mic.begin();
+
   { /// custom setting
     auto spk_cfg = M5.Speaker.config();
     /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
@@ -898,7 +912,7 @@ void setup()
     spk_cfg.task_pinned_core = APP_CPU_NUM;
     M5.Speaker.config(spk_cfg);
   }
-  M5.Speaker.begin();
+  //M5.Speaker.begin();
 
   Servo_setup();
   delay(1000);
@@ -1007,9 +1021,50 @@ void setup()
       
       nvs_close(nvs_handle);
     }
+
+    /// Weather city ID
+    fs = SD.open("/weather_city_id.txt", FILE_READ);
+    if(fs) {
+      size_t sz = fs.size();
+      char buf[sz + 1];
+      fs.read((uint8_t*)buf, sz);
+      buf[sz] = 0;
+      fs.close();
+
+      for(int x = 0; x < sz; x++) {
+        if(buf[x] == 0x0a || buf[x] == 0x0d){
+          buf[x] = 0;
+        }
+      }
+      Serial.println(buf);
+      weatherCityID = String(buf);
+    } else {
+      weatherCityID = "130010";
+    }
+    Serial.println(weatherCityID);
+
+    /// メモがあるか確認
+    fs = SD.open("/notepad.txt", FILE_READ);
+    if(fs) {
+      size_t sz = fs.size();
+      char buf[sz + 1];
+      fs.read((uint8_t*)buf, sz);
+      buf[sz] = 0;
+      fs.close();
+
+      note = String(buf);
+      Serial.printf("Notepad size: %d\n", sz);
+
+      if(sz >= 1){
+        speech_text = "メモが保存されています。読み上げますか？";
+        chatHistory.push_back(String("assistant"), String(""), speech_text);
+      }
+    }
+
     SD.end();
   } else {
     WiFi.begin();
+    weatherCityID = "130010";
   }
 
   {
@@ -1053,10 +1108,10 @@ void setup()
   Serial.println(WiFi.localIP());
   M5.Lcd.println(WiFi.localIP());
 
-  if (MDNS.begin("m5stack")) {
-    Serial.println("MDNS responder started");
-    M5.Lcd.println("MDNS responder started");
-  }
+  //if (MDNS.begin("m5stack")) {
+  //  Serial.println("MDNS responder started");
+  //  M5.Lcd.println("MDNS responder started");
+  //}
   delay(1000);
 
   server.on("/", handleRoot);
@@ -1130,6 +1185,8 @@ void setup()
   mp3 = new AudioGeneratorMP3();
 //  mp3->RegisterStatusCB(StatusCallback, (void*)"mp3");
 
+  wakeword_init();
+
   avatar.init();
   avatar.addTask(lipSync, "lipSync");
   avatar.addTask(servo, "servo");
@@ -1142,6 +1199,9 @@ void setup()
   box_BtnC.setupBox(280, 100, 40, 60);
 
   time_sync(NTPSRV, GMT_OFFSET, DAYLIGHT_OFFSET);           // 時刻同期
+
+
+  check_heap_free_size();
 }
 
 String random_words[18] = {"あなたは誰","楽しい","怒った","可愛い","悲しい","眠い","ジョークを言って","泣きたい","怒ったぞ","こんにちは","お疲れ様","詩を書いて","疲れた","お腹空いた","嫌いだ","苦しい","俳句を作って","歌をうたって"};
@@ -1151,19 +1211,22 @@ static int lastms1 = 0;
 
 void report_batt_level(){
   char buff[100];
-   int level = M5.Power.getBatteryLevel();
+  int level = M5.Power.getBatteryLevel();
+  mode = 0;
   if(M5.Power.isCharging())
     sprintf(buff,"充電中、バッテリーのレベルは%d％です。",level);
   else
     sprintf(buff,"バッテリーのレベルは%d％です。",level);
   avatar.setExpression(Expression::Happy);
-  Voicevox_tts(buff, (char*)TTS_PARMS.c_str());
+  mode = 0; 
+  speech_text = String(buff);
+  delay(1000);
   avatar.setExpression(Expression::Neutral);
-  Serial.println("mp3 begin");
 }
 
 void switch_monologue_mode(){
     String tmp;
+    mode = 0;
     if(random_speak) {
       tmp = "独り言始めます。";
       lastms1 = millis();
@@ -1174,15 +1237,61 @@ void switch_monologue_mode(){
     }
     random_speak = !random_speak;
     avatar.setExpression(Expression::Happy);
-    Voicevox_tts((char*)tmp.c_str(), (char*)TTS_PARMS.c_str());
+    mode = 0;
+    speech_text = tmp;
+    delay(1000);
     avatar.setExpression(Expression::Neutral);
-    Serial.println("mp3 begin");
+}
+
+void sw_tone(){
+  M5.Mic.end();
+    M5.Speaker.tone(1000, 100);
+  delay(500);
+    M5.Speaker.end();
+  M5.Mic.begin();
+}
+
+void SST_ChatGPT() {
+  bool prev_servo_home = servo_home;
+  random_speak = true;
+  random_time = -1;
+#ifdef USE_SERVO
+  servo_home = true;
+#endif
+  avatar.setExpression(Expression::Happy);
+  avatar.setSpeechText("御用でしょうか？");
+  String ret;
+  if(OPENAI_API_KEY != STT_API_KEY){
+    Serial.println("Google STT");
+    ret = SpeechToText(true);
+  } else {
+    Serial.println("Whisper STT");
+    ret = SpeechToText(false);
+  }
+#ifdef USE_SERVO
+  servo_home = prev_servo_home;
+#endif
+  Serial.println("音声認識終了");
+  Serial.println("音声認識結果");
+  if(ret != "") {
+    Serial.println(ret);
+    if (!mp3->isRunning() && speech_text=="" && speech_text_buffer == "") {
+      exec_chatGPT(ret);
+      mode = 0;
+    }
+  } else {
+    Serial.println("音声認識失敗");
+    avatar.setExpression(Expression::Sad);
+    avatar.setSpeechText("聞き取れませんでした");
+    delay(2000);
+    avatar.setSpeechText("");
+    avatar.setExpression(Expression::Neutral);
+  } 
 }
 
 void loop()
 {
   static int lastms = 0;
-//  static int lastms1 = 0;
 
   if (random_time >= 0 && millis() - lastms1 > random_time)
   {
@@ -1190,25 +1299,54 @@ void loop()
     random_time = 40000 + 1000 * random(30);
     if (!mp3->isRunning() && speech_text=="" && speech_text_buffer == "") {
       exec_chatGPT(random_words[random(18)]);
+      mode = 0;
     }
   }
 
+  M5.update();
   if (M5.BtnA.wasPressed())
   {
-    M5.Speaker.tone(1000, 100);
-    switch_monologue_mode();
+    if(mode >= 0){
+      sw_tone();
+      if(mode == 0){
+        avatar.setSpeechText("ウェイクワード有効");
+        mode = 1;
+        wakeword_is_enable = true;
+      } else {
+        avatar.setSpeechText("ウェイクワード無効");
+        mode = 0;
+        wakeword_is_enable = false;
+      }
+      delay(1000);
+      avatar.setSpeechText("");
+    }
   }
 
-  // if (Serial.available()) {
-  //   char kstr[256];
-  //   size_t len = Serial.readBytesUntil('\r', kstr, 256);
-  //   kstr[len]=0;
-  //   avatar.setExpression(Expression::Happy);
-  //   VoiceText_tts(kstr, tts_parms2);
-  //   avatar.setExpression(Expression::Neutral);
-	// }
+  if (M5.BtnB.pressedFor(2000)) {
+     M5.Mic.end();
+     M5.Speaker.tone(1000, 100);
+     delay(500);
+     M5.Speaker.tone(600, 100);
+     delay(1000);
+    M5.Speaker.end();
+    M5.Mic.begin();
+    random_time = -1;           //独り言停止
+    random_speak = true;
+    wakeword_is_enable = false; //wakeword 無効
+    mode = -1;
+#ifdef USE_SERVO
+      servo_home = true;
+      delay(500);
+#endif
+    avatar.setSpeechText("ウェイクワード登録開始");
+  }
 
-  M5.update();
+  if (M5.BtnC.wasPressed())
+  {
+    sw_tone();
+    report_batt_level();
+  }
+
 #if defined(ARDUINO_M5STACK_Core2) || defined( ARDUINO_M5STACK_CORES3 )
   auto count = M5.Touch.getCount();
   if (count)
@@ -1218,49 +1356,8 @@ void loop()
     {          
       if (box_stt.contain(t.x, t.y)&&(!mp3->isRunning()))
       {
-        M5.Speaker.tone(1000, 100);
-        delay(200);
-        M5.Speaker.end();
-        bool prev_servo_home = servo_home;
-        random_speak = true;
-        random_time = -1;
-#ifdef USE_SERVO
-        servo_home = true;
-#endif
-        avatar.setExpression(Expression::Happy);
-        avatar.setSpeechText("御用でしょうか？");
-        M5.Speaker.end();
-        String ret;
-
-        if(OPENAI_API_KEY != STT_API_KEY){
-          Serial.println("Google STT");
-          ret = SpeechToText(true);
-        } else {
-          Serial.println("Whisper STT");
-          ret = SpeechToText(false);
-        }
-
-#ifdef USE_SERVO
-        servo_home = prev_servo_home;
-#endif
-        M5.Speaker.begin();
-        
-        Serial.println("音声認識終了");
-        Serial.println("音声認識結果");
-        if(ret != "") {
-          Serial.println(ret);
-          if (!mp3->isRunning() && speech_text=="" && speech_text_buffer == "") {
-            exec_chatGPT(ret);
-          }
-        } else {
-          Serial.println("音声認識失敗");
-          avatar.setExpression(Expression::Sad);
-          avatar.setSpeechText("聞き取れませんでした");
-          delay(2000);
-          avatar.setSpeechText("");
-          avatar.setExpression(Expression::Neutral);
-        } 
-        //M5.Speaker.begin();
+        sw_tone();
+        SST_ChatGPT();
       }
 #ifdef USE_SERVO
       if (box_servo.contain(t.x, t.y))
@@ -1271,28 +1368,25 @@ void loop()
 #endif
       if (box_BtnA.contain(t.x, t.y))
       {
-        M5.Speaker.tone(1000, 100);
+        sw_tone();
         switch_monologue_mode();
       }
       if (box_BtnC.contain(t.x, t.y))
       {
-        M5.Speaker.tone(1000, 100);
+        sw_tone();
         report_batt_level();
       }
     }
   }
 #endif
 
-  if (M5.BtnC.wasPressed())
-  {
-    M5.Speaker.tone(1000, 100);
-    report_batt_level();
-  }
-
   if(speech_text != ""){
     avatar.setExpression(Expression::Happy);
     speech_text_buffer = speech_text;
     speech_text = "";
+    M5.Mic.end();
+    M5.Speaker.begin();
+    mode = 0;
     Voicevox_tts((char*)speech_text_buffer.c_str(), (char*)TTS_PARMS.c_str());
   }
 
@@ -1303,11 +1397,48 @@ void loop()
       Serial.println("mp3 stop");
       avatar.setExpression(Expression::Neutral);
       speech_text_buffer = "";
+      delay(200);
+      M5.Speaker.end();
+      M5.Mic.begin();
+      if(wakeword_is_enable) mode = 1;
+      else  mode = 0;
     }
     delay(1);
   } else {
   server.handleClient();
   }
-//delay(100);
+
+  if (mode == 0) { return; }
+  else if (mode < 0) {
+    if(wakeword_regist()){
+      avatar.setSpeechText("ウェイクワード登録終了");
+      delay(1000);
+      avatar.setSpeechText("");
+      mode = 0;
+      wakeword_is_enable = false;
+#ifdef USE_SERVO
+      servo_home = false;
+#endif
+    }
+  }
+  else if (mode > 0 && wakeword_is_enable) {
+    if( wakeword_compare()){
+        Serial.println("wakeword_compare OK!");
+        sw_tone();
+        SST_ChatGPT();
+    }
+  }
+}
+
+void check_heap_free_size(void){
+  Serial.printf("===============================================================\n");
+  Serial.printf("Check free heap size\n");
+  Serial.printf("===============================================================\n");
+  Serial.printf("esp_get_free_heap_size()                              : %6d\n", esp_get_free_heap_size() );
+  Serial.printf("heap_caps_get_free_size(MALLOC_CAP_DMA)               : %6d\n", heap_caps_get_free_size(MALLOC_CAP_DMA) );
+  Serial.printf("heap_caps_get_free_size(MALLOC_CAP_SPIRAM)            : %6d\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM) );
+  Serial.printf("heap_caps_get_free_size(MALLOC_CAP_INTERNAL)          : %6d\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL) );
+  Serial.printf("heap_caps_get_free_size(MALLOC_CAP_DEFAULT)           : %6d\n", heap_caps_get_free_size(MALLOC_CAP_DEFAULT) );
+
 }
  
