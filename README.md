@@ -44,6 +44,7 @@ XXXXXXXX@XXXX.com
 
 #### ●バス（電車）の時刻表
 SDカードに次のように時刻表を保存してください。
+※現行は祝日の判別はできません。
 
 ファイル名：bus_timetable.txt（平日）、bus_timetable_sat.txt（土曜）、bus_timetable_holiday.txt（日曜）
 ```
