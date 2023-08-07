@@ -4,6 +4,7 @@
 #include <HTTPClient.h>
 #include <SD.h>
 #include <EMailSender.h>
+#include "MailClient.h"
 using namespace m5avatar;
 
 extern Avatar avatar;
@@ -142,6 +143,14 @@ String json_ChatString =
           "\"description\": \"メールの内容。\""
         "}"
       "}"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"read_mail\","
+    "\"description\": \"受信メールを読み上げる。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {}"
     "}"
   "},"
   "{"
@@ -320,17 +329,24 @@ String save_note(const char* text){
   
   if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
     auto fs = SD.open("/notepad.txt", FILE_WRITE, true);
-    if(note == ""){
-      note = String(text);
+
+    if(fs) {
+      if(note == ""){
+        note = String(text);
+      }
+      else{
+        note = note + "\n" + String(text);
+      }
+      Serial.println(note);
+      fs.write((uint8_t*)note.c_str(), note.length());
+      fs.close();
+      SD.end();
+      response = "メモを保存しました。";
     }
     else{
-      note = note + "\n" + String(text);
+      response = "メモを保存できませんでした。";
+      SD.end();
     }
-    Serial.println(note);
-    fs.write((uint8_t*)note.c_str(), note.length());
-    fs.close();
-    SD.end();
-    response = "メモを保存しました。";
 
   }
   else{
@@ -355,11 +371,18 @@ String delete_note(){
 
   if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
     auto fs = SD.open("/notepad.txt", FILE_WRITE, true);
-    note = "";
-    fs.write((uint8_t*)note.c_str(), note.length());
-    fs.close();
-    SD.end();
-    response = "メモを消去しました。";
+
+    if(fs) {
+      note = "";
+      fs.write((uint8_t*)note.c_str(), note.length());
+      fs.close();
+      SD.end();
+      response = "メモを消去しました。";
+    }
+    else{
+      response = "メモを消去できませんでした。";
+      SD.end();
+    }
   }
   else{
     response = "メモを消去できませんでした。";
@@ -444,80 +467,54 @@ String get_bus_time(int nNext){
     response = "現在時刻の取得に失敗しました。";
   }
 
-
-
   return response;
 }
 
 
 //メッセージをメールで送信する関数
-
-String myMailAdr = "";    // "XXXXXXXX@gmail.com"
-String myMailPass = "";   // "XXXXXXXXXXXXXXXX"
-String toMailAdr = "";    // "XXXXXXXX@mac.com"
-
 String send_mail(String msg) {
   String response = "";
   EMailSender::EMailMessage message;
 
-  if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
-    auto fs = SD.open("/gmail.txt", FILE_READ);
-    if(fs) {
-      size_t sz = fs.size();
-      char buf[sz + 1];
-      fs.read((uint8_t*)buf, sz);
-      buf[sz] = 0;
-      fs.close();
-      SD.end();
+  if (authMailAdr != "") {
 
-      int y = 0;
-      int z = 0;
-      for(int x = 0; x < sz; x++) {
-        if(buf[x] == 0x0a || buf[x] == 0x0d)
-          buf[x] = 0;
-        else if (!y && x > 0 && !buf[x - 1] && buf[x])
-          y = x;
-        else if (!z && x > 0 && !buf[x - 1] && buf[x])
-          z = x;
-      }
+    EMailSender emailSend(authMailAdr.c_str(), authAppPass.c_str());
 
-      myMailAdr = String(buf);
-      myMailPass = String(&buf[y]);
-      toMailAdr = String(&buf[z]);
+    message.subject = "ｽﾀｯｸﾁｬﾝからの通知";
+    message.message = msg;
+    EMailSender::Response resp = emailSend.send(toMailAdr.c_str(), message);
 
-      Serial.println("My mail addr: " + myMailAdr);
-      Serial.println("My mail pass: " + myMailPass);
-      Serial.println("To mail addr: " + toMailAdr);
-
-      EMailSender emailSend(myMailAdr.c_str(), myMailPass.c_str());
-
-      message.subject = "ｽﾀｯｸﾁｬﾝからの通知";
-      message.message = msg;
-      EMailSender::Response resp = emailSend.send(toMailAdr.c_str(), message);
-
-      if(resp.status == true){
-        response = "メール送信成功";
-      }
-      else{
-        response = "メール送信失敗";
-      }
-
+    if(resp.status == true){
+      response = "メール送信成功";
     }
-    else {
-      Serial.println("Failed to SD.open().");    
-      response = "メール設定の読み取りに失敗しました。";
-      SD.end();
+    else{
+      response = "メール送信失敗";
     }
 
   }
   else{
-    response = "メール設定の読み取りに失敗しました。";
+    response = "メールアカウント情報のエラー";
   }
+
 
   return response;
 }
 
+//受信したメールを読み上げる
+String read_mail(void) {
+  String response = "";
 
+  if(recvMessages.size() > 0){
+    response = String(recvMessages[0]);
+    recvMessages.pop_front();
+    prev_nMail = recvMessages.size();
+  }
+  else{
+    response = "受信メールはありません。";
+  }
+  
+  return response;
+}
 
 // 今日の天気をWeb APIで取得する関数
 //   city IDはsetup()でSDカードのファイルから読み込む。
@@ -607,7 +604,7 @@ String exec_calledFunc(DynamicJsonDocument doc, String* calledFunc){
     else if(strcmp(name, "get_week") == 0){
       response = get_week();    
     }
-    else if(strcmp(name, "listen_to_you") == 0){
+    else if(strcmp(name, "listen") == 0){
       response = listen();    
     }
     else if(strcmp(name, "save_note") == 0){
@@ -630,6 +627,9 @@ String exec_calledFunc(DynamicJsonDocument doc, String* calledFunc){
       const char* text = argsDoc["message"];
       Serial.println(text);
       response = send_mail(text);
+    }
+    else if(strcmp(name, "read_mail") == 0){
+      response = read_mail();    
     }
     else if(strcmp(name, "get_weathers") == 0){
       response = get_weathers();    

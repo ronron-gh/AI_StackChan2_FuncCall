@@ -21,6 +21,7 @@ public:
   String get_funcName(int i);
   String get_content(int i);
   void clear();
+  void clean_function_role();
 };
 
 #endif //_CHAT_HISTORY_H

@@ -47,3 +47,34 @@ void ChatHistory::clear(){
   chatHistory_funcName.clear();
   chatHistory_content.clear();
 }
+
+void ChatHistory::clean_function_role(){
+  String role;
+  String funcName;
+  String content;
+  int size = get_size();
+
+  for(int i=0; i<size; i++){
+    role = get_role(0);
+    funcName = get_funcName(0);
+    content = get_content(0);
+    pop_front();
+    if(role != "function"){
+      push_back(role, funcName, content);
+    }
+
+  }
+
+#if 0
+  //結果確認
+  size = get_size();
+  for(int i=0; i<size; i++){
+    role = get_role(i);
+    funcName = get_funcName(i);
+    content = get_content(i);
+    Serial.printf("role %02d: %s\n", i, role.c_str() );
+    Serial.printf("funcName %02d: %s\n", i, funcName.c_str() );
+    Serial.printf("content %02d: %s\n", i, content.c_str() );
+  }
+#endif
+}

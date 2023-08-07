@@ -21,6 +21,8 @@
 #include <ArduinoJson.h>
 #include <ESP32WebServer.h>
 //#include <ESPmDNS.h>
+#include "MailClient.h"
+
 //#include <deque>
 #include "AudioWhisper.h"
 #include "Whisper.h"
@@ -30,6 +32,8 @@
 
 #include "FunctionCall.h"
 #include "ChatHistory.h"
+
+
 
 // 保存する質問と回答の最大数
 //const int MAX_HISTORY = 5;
@@ -444,8 +448,12 @@ void exec_chatGPT(String text) {
         speech_text = response;
         Serial.println("Chat End");
       } else {
-        response = "busy";
+        //response = "busy";
+        Serial.println("Chat End (TTS busy)");
       }
+
+      //チャット履歴の容量を圧迫しないように、functionロールを削除する
+      chatHistory.clean_function_role();
 
       break;
     }
@@ -1043,6 +1051,41 @@ void setup()
     }
     Serial.println(weatherCityID);
 
+
+    // Gmailアカウント、アプリパスワード
+    fs = SD.open("/gmail.txt", FILE_READ);
+    if(fs) {
+      size_t sz = fs.size();
+      char buf[sz + 1];
+      fs.read((uint8_t*)buf, sz);
+      buf[sz] = 0;
+      fs.close();
+
+      int y = 0;
+      int z = 0;
+      for(int x = 0; x < sz; x++) {
+        if(buf[x] == 0x0a || buf[x] == 0x0d)
+          buf[x] = 0;
+        else if (!y && x > 0 && !buf[x - 1] && buf[x])
+          y = x;
+        else if (!z && x > 0 && !buf[x - 1] && buf[x])
+          z = x;
+      }
+
+      authMailAdr = String(buf);
+      authAppPass = String(&buf[y]);
+      toMailAdr = String(&buf[z]);
+
+      Serial.println("My mail addr: " + authMailAdr);
+      Serial.println("My mail pass: " + authAppPass);
+      Serial.println("To mail addr: " + toMailAdr);
+
+    }
+    else {
+      Serial.println("Failed to SD.open().");    
+    }
+
+
     /// メモがあるか確認
     fs = SD.open("/notepad.txt", FILE_READ);
     if(fs) {
@@ -1056,9 +1099,12 @@ void setup()
       Serial.printf("Notepad size: %d\n", sz);
 
       if(sz >= 1){
-        speech_text = "メモが保存されています。読み上げますか？";
-        chatHistory.push_back(String("assistant"), String(""), speech_text);
+        speech_text = "メモが保存されています。";
+        //chatHistory.push_back(String("assistant"), String(""), speech_text);
       }
+    }
+    else {
+      Serial.println("Failed to SD.open().");    
     }
 
     SD.end();
@@ -1198,11 +1244,18 @@ void setup()
   box_BtnA.setupBox(0, 100, 40, 60);
   box_BtnC.setupBox(280, 100, 40, 60);
 
-  time_sync(NTPSRV, GMT_OFFSET, DAYLIGHT_OFFSET);           // 時刻同期
+  //時刻同期
+  time_sync(NTPSRV, GMT_OFFSET, DAYLIGHT_OFFSET);
+  
+  //メール受信設定
+  imap_init();
+  startReadMailTimer();
 
-
+  //ヒープメモリ残量確認(デバッグ用)
   check_heap_free_size();
 }
+
+
 
 String random_words[18] = {"あなたは誰","楽しい","怒った","可愛い","悲しい","眠い","ジョークを言って","泣きたい","怒ったぞ","こんにちは","お疲れ様","詩を書いて","疲れた","お腹空いた","嫌いだ","苦しい","俳句を作って","歌をうたって"};
 int random_time = -1;
@@ -1394,6 +1447,7 @@ void loop()
     if (!mp3->loop()) {
       mp3->stop();
       if(file != nullptr){delete file; file = nullptr;}
+      if(buff != nullptr){delete buff; buff = nullptr;}
       Serial.println("mp3 stop");
       avatar.setExpression(Expression::Neutral);
       speech_text_buffer = "";
@@ -1408,7 +1462,7 @@ void loop()
   server.handleClient();
   }
 
-  if (mode == 0) { return; }
+  if (mode == 0) { /* return; */ }
   else if (mode < 0) {
     if(wakeword_regist()){
       avatar.setSpeechText("ウェイクワード登録終了");
@@ -1428,6 +1482,23 @@ void loop()
         SST_ChatGPT();
     }
   }
+
+  if(readMailTimerCallbacked && !mp3->isRunning()){
+    Serial.println("loop task: imapReadMail()");
+    imapReadMail();
+    readMailTimerCallbacked = false;
+
+    int nMail = recvMessages.size();
+    if(nMail > prev_nMail){
+      if(speech_text=="" && speech_text_buffer == "") {
+        speech_text = String(nMail) + "件のメールを受信しています。";
+        prev_nMail = nMail;
+      }
+    }
+
+    //ヒープメモリ残量確認(デバッグ用)
+    //check_heap_free_size();
+  }
 }
 
 void check_heap_free_size(void){
@@ -1441,4 +1512,8 @@ void check_heap_free_size(void){
   Serial.printf("heap_caps_get_free_size(MALLOC_CAP_DEFAULT)           : %6d\n", heap_caps_get_free_size(MALLOC_CAP_DEFAULT) );
 
 }
+
+
+
+
  
