@@ -4,6 +4,10 @@ OpenAIのFunction Callingを使って、robo8080さんの[AIｽﾀｯｸﾁｬ�
 ※Function Callingを使わない通常の会話もできます。  
 ※v0.2.0からウェイクワードにも対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。
 
+### 開発環境
+- M5Stack Core2 / CoreS3
+- Platformio
+
 ### Function Callingで呼び出せる機能
 Function Callingで呼び出せる機能の一覧を下表に示します。
 
