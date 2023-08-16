@@ -4,11 +4,11 @@ OpenAIのFunction Callingを使って、robo8080さんの[AIｽﾀｯｸﾁｬ�
 ※Function Callingを使わない通常の会話もできます。  
 ※v0.2.0からウェイクワードにも対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。
 
-### 開発環境
+## 開発環境
 - M5Stack Core2 / CoreS3
 - Platformio
 
-### Function Callingで呼び出せる機能
+## Function Callingで呼び出せる機能
 Function Callingで呼び出せる機能の一覧を下表に示します。
 
 プロンプトや関数の実装は FunctionCall.cpp にまとめています。指示に応じてｽﾀｯｸﾁｬﾝが関数を使いこなしてくれます。  
@@ -23,11 +23,12 @@ FunctionCall.cppを改造することで、新たな機能を追加するなど�
 | 4 | メール受信 | 「メールを読んで」|[動画(Twitter)](https://twitter.com/motoh_tw/status/1688132338293882880)|・送信と同じアプリパスワードを使います。<br>・メールサーバを3分毎に確認し、新しいメールがあれば「〇件のメールを受信しています」と教えてくれます。|
 | 5 | バス（電車）時刻表 | 「次のバスの時間は？」<br>「その次は？」 |[動画(Twitter)](https://twitter.com/motoh_tw/status/1686404335121686528)|時刻表をSDカードのファイルに保存しておく必要があります（「各種設定ファイル」参照）。|
 | 6 | 天気予報 | 「今日の天気は？」<br>「明日の天気は？」 || ・robo8080さんが[Gistに公開してくださったコード](https://gist.github.com/robo8080/60a7bb619f6bae66aa97496371884386)を参考にさせていただきました。<br>・City IDはSDカードの設定ファイルで変更することができます（「各種設定ファイル」参照）。|
+| 7 | ウェイクワード登録 | 「ウェイクワード登録」<br>「ウェイクワード有効化」|||
 
 
 
 
-### 各種設定ファイル
+## 各種設定ファイル
 #### ●各種APIキー
 ｽﾀｯｸﾁｬﾝとお話するためには次のAPIキーをSDカードに保存する必要があります。APIキーの取得方法などの詳細は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。
   - ChatGPT
@@ -72,11 +73,24 @@ SDカードに次のようにCity IDを保存してください（例は神奈�
 ```
 City IDは[こちら](https://weather.tsukumijima.net/primary_area.xml)で調べることができます。
 
-### 注意事項
+## LEDパネルによる状態表示（CoreS3のみ）
+CoreS3の場合、ポートAにLEDパネル（NeoPixel互換LED搭載 HEXボード ）を接続すると、次の状態に応じて点灯します。
+
+- 起動完了（ドット絵の起動メッセージが流れる）
+- 聞き取り中（青と緑の輪が点灯）
+- 聞き取り成功（青と緑の輪が回転）
+- 受信メールあり（黄色の輪がゆっくり点滅）
+
+なお、起動完了時の流れるドット絵は次の手順で編集できます。
+
+① tool/LED_Scroll_Pattern.xlsmでドット絵を編集してコードに変換する。  
+② HexLED.cpp内の配列led_scroll_pattern01の値を①のコードに差し替える。
+
+## 注意事項
 - フォルダ名が長いため、ワークスペースの場所によってはライブラリのインクルードパスが通らない場合があります。
 なるべくCドライブ直下に近い場所をワークスペースにしてください。(例 C:\Git)
 
-### バージョン履歴
+## バージョン履歴
 - v0.0.1
   - 初回リリース
 - v0.1.0
@@ -85,6 +99,9 @@ City IDは[こちら](https://weather.tsukumijima.net/primary_area.xml)で調べ
   - ウェイクワードに対応。
   - Function Callingで呼び出せる機能を追加。
     - 追加した機能：メモ（SDカード）、メール送信、バス（電車）時刻表、天気予報
-- v0.3.0（mainタグ）
+- v0.3.0
   - メール受信機能を追加。
   - その他軽微な改善や不具合修正。
+- v0.4.0（mainタグ）
+  - Function Callingの機能にウェイクワード登録、有効化を追加。
+  - LEDパネル（NeoPixel互換LED搭載 HEXボード ）による状態表示に対応（CoreS3のみ）。
