@@ -5,6 +5,7 @@
 #include <SD.h>
 #include <EMailSender.h>
 #include "MailClient.h"
+#include "HexLED.h"
 using namespace m5avatar;
 
 extern Avatar avatar;
@@ -148,6 +149,22 @@ String json_ChatString =
   "{"
     "\"name\": \"read_mail\","
     "\"description\": \"受信メールを読み上げる。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {}"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"register_wakeword\","
+    "\"description\": \"ウェイクワードを登録する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {}"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"wakeword_enable\","
+    "\"description\": \"ウェイクワードを有効化する。\","
     "\"parameters\": {"
       "\"type\":\"object\","
       "\"properties\": {}"
@@ -480,7 +497,7 @@ String send_mail(String msg) {
 
     EMailSender emailSend(authMailAdr.c_str(), authAppPass.c_str());
 
-    message.subject = "ｽﾀｯｸﾁｬﾝからの通知";
+    message.subject = "スタックチャンからの通知";
     message.message = msg;
     EMailSender::Response resp = emailSend.send(toMailAdr.c_str(), message);
 
@@ -508,11 +525,29 @@ String read_mail(void) {
     response = String(recvMessages[0]);
     recvMessages.pop_front();
     prev_nMail = recvMessages.size();
+
+    if(recvMessages.size() == 0){
+      hex_led_ptn_off();
+    }
   }
   else{
     response = "受信メールはありません。";
   }
   
+  return response;
+}
+
+bool register_wakeword_required = false;
+String register_wakeword(void){
+  String response = "ウェイクワード登録を開始します。";
+  register_wakeword_required = true;
+  return response;
+}
+
+bool wakeword_enable_required = false;
+String wakeword_enable(void){
+  String response = "ウェイクワードを有効化します。";
+  wakeword_enable_required = true;
   return response;
 }
 
@@ -630,6 +665,12 @@ String exec_calledFunc(DynamicJsonDocument doc, String* calledFunc){
     }
     else if(strcmp(name, "read_mail") == 0){
       response = read_mail();    
+    }
+    else if(strcmp(name, "register_wakeword") == 0){
+      response = register_wakeword();    
+    }
+    else if(strcmp(name, "wakeword_enable") == 0){
+      response = wakeword_enable();    
     }
     else if(strcmp(name, "get_weathers") == 0){
       response = get_weathers();    

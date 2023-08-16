@@ -33,7 +33,9 @@
 #include "FunctionCall.h"
 #include "ChatHistory.h"
 
-
+#if defined( ARDUINO_M5STACK_CORES3 )
+#include "HexLED.h"
+#endif
 
 // 保存する質問と回答の最大数
 //const int MAX_HISTORY = 5;
@@ -1251,6 +1253,12 @@ void setup()
   imap_init();
   startReadMailTimer();
 
+#if defined( ARDUINO_M5STACK_CORES3 )
+  hex_led_init();
+  //hex_led_ptn_off();
+  hex_led_ptn_boot();
+#endif
+
   //ヒープメモリ残量確認(デバッグ用)
   check_heap_free_size();
 }
@@ -1329,10 +1337,16 @@ void SST_ChatGPT() {
   if(ret != "") {
     Serial.println(ret);
     if (!mp3->isRunning() && speech_text=="" && speech_text_buffer == "") {
+#if defined( ARDUINO_M5STACK_CORES3 )
+      hex_led_ptn_accept();
+#endif
       exec_chatGPT(ret);
       mode = 0;
     }
   } else {
+#if defined( ARDUINO_M5STACK_CORES3 )
+    hex_led_ptn_off();
+#endif
     Serial.println("音声認識失敗");
     avatar.setExpression(Expression::Sad);
     avatar.setSpeechText("聞き取れませんでした");
@@ -1356,82 +1370,93 @@ void loop()
     }
   }
 
-  M5.update();
-  if (M5.BtnA.wasPressed())
-  {
-    if(mode >= 0){
-      sw_tone();
-      if(mode == 0){
-        avatar.setSpeechText("ウェイクワード有効");
-        mode = 1;
-        wakeword_is_enable = true;
-      } else {
-        avatar.setSpeechText("ウェイクワード無効");
-        mode = 0;
-        wakeword_is_enable = false;
+  if(speech_text=="" && speech_text_buffer == ""){
+    M5.update();
+    if (M5.BtnA.wasPressed() || wakeword_enable_required)
+    {
+      wakeword_enable_required = false;
+
+      if(mode >= 0){
+        sw_tone();
+        if(mode == 0){
+          avatar.setSpeechText("ウェイクワード有効");
+          mode = 1;
+          wakeword_is_enable = true;
+        } else {
+          avatar.setSpeechText("ウェイクワード無効");
+          mode = 0;
+          wakeword_is_enable = false;
+        }
+        delay(1000);
+        avatar.setSpeechText("");
       }
-      delay(1000);
-      avatar.setSpeechText("");
     }
-  }
 
-  if (M5.BtnB.pressedFor(2000)) {
-     M5.Mic.end();
-     M5.Speaker.tone(1000, 100);
-     delay(500);
-     M5.Speaker.tone(600, 100);
-     delay(1000);
-    M5.Speaker.end();
-    M5.Mic.begin();
-    random_time = -1;           //独り言停止
-    random_speak = true;
-    wakeword_is_enable = false; //wakeword 無効
-    mode = -1;
-#ifdef USE_SERVO
-      servo_home = true;
+    if (M5.BtnB.pressedFor(2000) || register_wakeword_required) {
+      register_wakeword_required = false;
+
+      M5.Mic.end();
+      M5.Speaker.tone(1000, 100);
       delay(500);
-#endif
-    avatar.setSpeechText("ウェイクワード登録開始");
-  }
+      M5.Speaker.tone(600, 100);
+      delay(1000);
+      M5.Speaker.end();
+      M5.Mic.begin();
+      random_time = -1;           //独り言停止
+      random_speak = true;
+      wakeword_is_enable = false; //wakeword 無効
+      mode = -1;
+  #ifdef USE_SERVO
+        servo_home = true;
+        delay(500);
+  #endif
+      avatar.setSpeechText("ウェイクワード登録開始");
+    }
 
-  if (M5.BtnC.wasPressed())
-  {
-    sw_tone();
-    report_batt_level();
-  }
+    if (M5.BtnC.wasPressed())
+    {
+      sw_tone();
+      report_batt_level();
+    }
+
 
 #if defined(ARDUINO_M5STACK_Core2) || defined( ARDUINO_M5STACK_CORES3 )
-  auto count = M5.Touch.getCount();
-  if (count)
-  {
-    auto t = M5.Touch.getDetail();
-    if (t.wasPressed())
-    {          
-      if (box_stt.contain(t.x, t.y)&&(!mp3->isRunning()))
-      {
-        sw_tone();
-        SST_ChatGPT();
-      }
-#ifdef USE_SERVO
-      if (box_servo.contain(t.x, t.y))
-      {
-        servo_home = !servo_home;
-        M5.Speaker.tone(1000, 100);
-      }
+    auto count = M5.Touch.getCount();
+    if (count)
+    {
+      auto t = M5.Touch.getDetail();
+      if (t.wasPressed())
+      {          
+        if (box_stt.contain(t.x, t.y)&&(!mp3->isRunning()))
+        {
+          sw_tone();
+#if defined( ARDUINO_M5STACK_CORES3 )
+          hex_led_ptn_wake();
 #endif
-      if (box_BtnA.contain(t.x, t.y))
-      {
-        sw_tone();
-        switch_monologue_mode();
-      }
-      if (box_BtnC.contain(t.x, t.y))
-      {
-        sw_tone();
-        report_batt_level();
+          SST_ChatGPT();
+        }
+#ifdef USE_SERVO
+        if (box_servo.contain(t.x, t.y))
+        {
+          servo_home = !servo_home;
+          //M5.Speaker.tone(1000, 100);
+          sw_tone();
+        }
+#endif
+        if (box_BtnA.contain(t.x, t.y))
+        {
+          sw_tone();
+          switch_monologue_mode();
+        }
+        if (box_BtnC.contain(t.x, t.y))
+        {
+          sw_tone();
+          report_batt_level();
+        }
       }
     }
-  }
 #endif
+  }
 
   if(speech_text != ""){
     avatar.setExpression(Expression::Happy);
@@ -1499,6 +1524,13 @@ void loop()
     //ヒープメモリ残量確認(デバッグ用)
     //check_heap_free_size();
   }
+
+#if defined( ARDUINO_M5STACK_CORES3 )
+  if(recvMessages.size() > 0){
+    hex_led_ptn_notification();
+  }
+#endif
+
 }
 
 void check_heap_free_size(void){
