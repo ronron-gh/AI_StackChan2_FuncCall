@@ -79,7 +79,7 @@ const int   DAYLIGHT_OFFSET = 0;                    // サマータイム設定�
 /// 関数プロトタイプ宣言 /// 
 void exec_chatGPT(String text);
 void check_heap_free_size(void);
-
+void check_heap_largest_free_block(void);
 
 /// set M5Speaker virtual channel (0-7)
 static constexpr uint8_t m5spk_virtual_channel = 0;
@@ -330,9 +330,11 @@ String chatGpt(String json_string, String* calledFunc) {
   String response = "";
   avatar.setExpression(Expression::Doubt);
   avatar.setSpeechText("考え中…");
+  hex_led_ptn_thinking_start();
   String ret = https_post_json("https://api.openai.com/v1/chat/completions", json_string.c_str(), root_ca_openai);
   avatar.setExpression(Expression::Neutral);
   avatar.setSpeechText("");
+  hex_led_ptn_thinking_end();
   Serial.println(ret);
   if(ret != ""){
     DynamicJsonDocument doc(2000);
@@ -920,6 +922,8 @@ void setup()
     /// Increasing the sample_rate will improve the sound quality instead of increasing the CPU load.
     spk_cfg.sample_rate = 96000; // default:64000 (64kHz)  e.g. 48000 , 50000 , 80000 , 96000 , 100000 , 128000 , 144000 , 192000 , 200000
     spk_cfg.task_pinned_core = APP_CPU_NUM;
+    //spk_cfg.dma_buf_count = 8;
+    //spk_cfg.dma_buf_len = 128;
     M5.Speaker.config(spk_cfg);
   }
   //M5.Speaker.begin();
@@ -1257,10 +1261,12 @@ void setup()
   hex_led_init();
   //hex_led_ptn_off();
   hex_led_ptn_boot();
+
 #endif
 
   //ヒープメモリ残量確認(デバッグ用)
   check_heap_free_size();
+  check_heap_largest_free_block();
 }
 
 
@@ -1319,6 +1325,11 @@ void SST_ChatGPT() {
 #ifdef USE_SERVO
   servo_home = true;
 #endif
+
+#if defined( ARDUINO_M5STACK_CORES3 )
+          hex_led_ptn_wake();
+#endif
+
   avatar.setExpression(Expression::Happy);
   avatar.setSpeechText("御用でしょうか？");
   String ret;
@@ -1430,9 +1441,6 @@ void loop()
         if (box_stt.contain(t.x, t.y)&&(!mp3->isRunning()))
         {
           sw_tone();
-#if defined( ARDUINO_M5STACK_CORES3 )
-          hex_led_ptn_wake();
-#endif
           SST_ChatGPT();
         }
 #ifdef USE_SERVO
@@ -1522,7 +1530,7 @@ void loop()
     }
 
     //ヒープメモリ残量確認(デバッグ用)
-    //check_heap_free_size();
+    //check_heap_largest_free_block();
   }
 
 #if defined( ARDUINO_M5STACK_CORES3 )
@@ -1545,6 +1553,16 @@ void check_heap_free_size(void){
 
 }
 
+void check_heap_largest_free_block(void){
+  Serial.printf("===============================================================\n");
+  Serial.printf("Check largest free heap block\n");
+  Serial.printf("===============================================================\n");
+  Serial.printf("heap_caps_get_largest_free_block(MALLOC_CAP_DMA)      : %6d\n", heap_caps_get_largest_free_block(MALLOC_CAP_DMA) );
+  Serial.printf("heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM)   : %6d\n", heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) );
+  Serial.printf("heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) : %6d\n", heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) );
+  Serial.printf("heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT)  : %6d\n", heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) );
+
+}
 
 
 

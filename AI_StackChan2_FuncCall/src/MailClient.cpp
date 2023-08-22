@@ -275,8 +275,10 @@ void imapReadMail(void){
   imap_data.download.text = true;
   //imap_data.download.html = true;
   imap_data.download.html = false;
-  imap_data.download.attachment = true;
-  imap_data.download.inlineImg = true;
+  //imap_data.download.attachment = true;
+  imap_data.download.attachment = false;
+  //imap_data.download.inlineImg = true;
+  imap_data.download.inlineImg = false;
 
   /** Set to enable the results i.e. html and text messaeges
    * which the content stored in the IMAPSession object is limited
@@ -299,7 +301,8 @@ void imapReadMail(void){
   // imap_data.enable.header_case_sensitive = true;
 
   /* Set the limit of number of messages in the search results */
-  imap_data.limit.search = 5;
+  //imap_data.limit.search = 5;
+  imap_data.limit.search = 1;
 
   /** Set the maximum size of message stored in
    * IMAPSession object in byte
@@ -312,7 +315,7 @@ void imapReadMail(void){
    * The file which its size is largger than this limit may be saved
    * as truncated file.
    */
-  imap_data.limit.attachment_size = 1024 * 1024 * 5;
+//  imap_data.limit.attachment_size = 1024 * 1024 * 5;
 
   // If ID extension was supported by IMAP server, assign the client identification
   // name, version, vendor, os, os_version, support_url, address, command, arguments, environment

@@ -14,5 +14,7 @@ void hex_led_ptn_wake(void);
 void hex_led_ptn_accept(void);
 void hex_led_ptn_notification(void);
 void hex_led_ptn_boot(void);
+void hex_led_ptn_thinking_start(void);
+void hex_led_ptn_thinking_end(void);
 
 #endif //_HEX_LED_H_
