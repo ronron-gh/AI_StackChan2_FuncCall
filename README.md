@@ -2,7 +2,7 @@
 OpenAIのFunction Callingを使って、robo8080さんの[AIｽﾀｯｸﾁｬﾝ2](https://github.com/robo8080/AI_StackChan2)に様々な機能を追加しました。  
 
 ※Function Callingを使わない通常の会話もできます。  
-※v0.2.0からウェイクワードにも対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。
+
 
 ## 開発環境
 - M5Stack Core2 / CoreS3
@@ -73,6 +73,12 @@ SDカードに次のようにCity IDを保存してください（例は神奈�
 ```
 City IDは[こちら](https://weather.tsukumijima.net/primary_area.xml)で調べることができます。
 
+#### ●アラーム音のMP3
+タイマー機能のアラーム音として、alarm.mp3という名前でSDカードに保存した
+
+## ウェイクワード対応
+v0.2.0からウェイクワードにも対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。
+
 ## LEDパネルによる状態表示（CoreS3のみ）
 CoreS3の場合、ポートAにLEDパネル（NeoPixel互換LED搭載 HEXボード ）を接続すると、次の状態に応じて点灯します。
 
@@ -86,6 +92,8 @@ CoreS3の場合、ポートAにLEDパネル（NeoPixel互換LED搭載 HEXボー�
 
 ① tool/LED_Scroll_Pattern.xlsmでドット絵を編集してコードに変換する。  
 ② HexLED.cpp内の配列led_scroll_pattern01の値を①のコードに差し替える。
+
+## カメラによる顔検出（CoreS3のみ）
 
 ## 注意事項
 - フォルダ名が長いため、ワークスペースの場所によってはライブラリのインクルードパスが通らない場合があります。
