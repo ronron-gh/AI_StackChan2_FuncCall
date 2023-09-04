@@ -79,6 +79,14 @@ alarm.mp3という名前でSDカードに保存しておくと、タイマー機
 
 ## ウェイクワード対応
 v0.2.0からウェイクワードにも対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。
+※v0.5.0以降、カメラ＆顔検出のためにメモリを節約するため、ウェイクワードはplatformio.iniで無効化されています。
+```
+build_flags=
+  -DBOARD_HAS_PSRAM
+  -DARDUINO_M5STACK_CORES3
+  -DENABLE_FACE_DETECT
+  ;-DENABLE_WAKEWORD
+```
 
 ## LEDパネルによる状態表示（CoreS3のみ）
 CoreS3の場合、ポートAにLEDパネル（NeoPixel互換LED搭載 HEXボード ）を接続すると、次の状態に応じて点灯します。
