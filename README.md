@@ -2,7 +2,7 @@
 OpenAIのFunction Callingを使って、robo8080さんの[AIｽﾀｯｸﾁｬﾝ2](https://github.com/robo8080/AI_StackChan2)に様々な機能を追加しました。  
 
 ※Function Callingを使わない通常の会話もできます。  
-※v0.2.0からウェイクワードにも対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。
+
 
 ## 開発環境
 - M5Stack Core2 / CoreS3
@@ -73,18 +73,39 @@ SDカードに次のようにCity IDを保存してください（例は神奈�
 ```
 City IDは[こちら](https://weather.tsukumijima.net/primary_area.xml)で調べることができます。
 
+#### ●アラーム音のMP3
+alarm.mp3という名前でSDカードに保存しておくと、タイマー機能のアラーム音として再生されます。
+（MP3ファイルがない場合は、ｽﾀｯｸﾁｬﾝが「時間になりました」と話します。）
+
+## ウェイクワード対応
+v0.2.0からウェイクワードにも対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。  
+※v0.5.0以降、カメラ＆顔検出のためにメモリを節約するため、ウェイクワードはplatformio.iniで以下のように無効化されています。ウェイクワードを有効化する場合、カメラ＆顔検出（-DENABLE_FACE_DETECT）は無効化することを推奨します。
+```
+build_flags=
+  -DBOARD_HAS_PSRAM
+  -DARDUINO_M5STACK_CORES3
+  -DENABLE_FACE_DETECT
+  ;-DENABLE_WAKEWORD
+```
+
 ## LEDパネルによる状態表示（CoreS3のみ）
 CoreS3の場合、ポートAにLEDパネル（NeoPixel互換LED搭載 HEXボード ）を接続すると、次の状態に応じて点灯します。
 
 - 起動完了（ドット絵の起動メッセージが流れる）
 - 聞き取り中（青と緑の輪が点灯）
 - 聞き取り成功（青と緑の輪が回転）
+- 考え中（白い光が回転）
 - 受信メールあり（黄色の輪がゆっくり点滅）
 
 なお、起動完了時の流れるドット絵は次の手順で編集できます。
 
 ① tool/LED_Scroll_Pattern.xlsmでドット絵を編集してコードに変換する。  
 ② HexLED.cpp内の配列led_scroll_pattern01の値を①のコードに差し替える。
+
+## カメラによる顔検出（CoreS3のみ）
+- 顔を検出すると音声認識を起動します。
+  - LCD中央左側をタッチするとサイレントモードになり、顔検出しても起動しません。（代わりに、顔検出している間ｽﾀｯｸﾁｬﾝが笑顔になります。）
+- LCDの左上隅にカメラ画像が表示されます。画像部分をタッチすると表示ON/OFFできます。
 
 ## 注意事項
 - フォルダ名が長いため、ワークスペースの場所によってはライブラリのインクルードパスが通らない場合があります。
@@ -102,6 +123,11 @@ CoreS3の場合、ポートAにLEDパネル（NeoPixel互換LED搭載 HEXボー�
 - v0.3.0
   - メール受信機能を追加。
   - その他軽微な改善や不具合修正。
-- v0.4.0（mainタグ）
+- v0.4.0
   - Function Callingの機能にウェイクワード登録、有効化を追加。
   - LEDパネル（NeoPixel互換LED搭載 HEXボード ）による状態表示に対応（CoreS3のみ）。
+- v0.4.1
+  - LEDパネルの点灯パターンを追加。
+- v0.5.0 (mainタグ)
+  - カメラの顔検出による起動に対応。
+  - タイマー機能のアラーム音としてSDカード内のMP3を再生するように改修。
