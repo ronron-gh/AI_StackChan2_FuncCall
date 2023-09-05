@@ -1,11 +1,13 @@
 #include "FunctionCall.h"
 #include <Avatar.h>
 #include <AudioGeneratorMP3.h>
+#include "AudioOutputM5Speaker.h"
 #include <HTTPClient.h>
 #include <SD.h>
 #include <EMailSender.h>
 #include "MailClient.h"
 #include "HexLED.h"
+#include "WakeWord.h"
 using namespace m5avatar;
 
 extern Avatar avatar;
@@ -184,12 +186,12 @@ String json_ChatString =
 "}";
 
 
+bool alarmTimerCallbacked = false;
 void alarmTimerCallback(TimerHandle_t _xTimer){
   xTimer = NULL;
   Serial.println("時間になりました。");
-  if (!mp3->isRunning() && speech_text=="" && speech_text_buffer == "") {
-    speech_text = "時間になりました。";
-  }
+
+  alarmTimerCallbacked = true;
 }
 
 void powerOffTimerCallback(TimerHandle_t _xTimer){
@@ -212,10 +214,10 @@ String timer(int32_t time, const char* action){
       xTimer = xTimerCreate("Timer", time * 1000, pdFALSE, 0, alarmTimerCallback);
       if(xTimer != NULL){
         xTimerStart(xTimer, 0);
-        response = String(time) + "秒後にタイマーをセットしました。";
+        response = String(time) + "秒後にalarmをセットしました。";
       }
       else{
-        response = String(time) + "タイマー設定が失敗しました。";
+        response = "タイマーの設定が失敗しました。";
       }
     }
     else if(strcmp(action, "shutdown") == 0){
@@ -225,7 +227,7 @@ String timer(int32_t time, const char* action){
         response = String(time) + "秒後にパワーオフします。";
       }
       else{
-        response = String(time) + "タイマー設定が失敗しました。";
+        response = "タイマー設定が失敗しました。";
       }
     }
   }

@@ -6,6 +6,7 @@
 #include <AudioFileSourceBuffer.h>
 #include "AudioFileSourceHTTPSStream.h"
 //#include "AudioOutputM5Speaker.h"
+#include "SpiRamJsonDocument.h"
 
 //-----------------------------------------------------
 extern String VOICEVOX_API_KEY;
@@ -233,7 +234,10 @@ void Voicevox_tts(char *text,char *tts_parms){
   String URL = voicevox_tts_url(tts_url.c_str(), root_ca);
   Serial.println(tts_url);
 
-  if(URL == "") return;
+  if(URL == ""){
+    Serial.println("failed to get stream URL.");
+    return;
+  }
 //  while(!voicevox_tts_json_status(tts_status_url.c_str(), "isAudioReady", root_ca)) delay(1);
 //delay(2500);
   file = new AudioFileSourceHTTPSStream(URL.c_str(), root_ca);

@@ -10,6 +10,7 @@ extern String note;
 
 extern bool register_wakeword_required;
 extern bool wakeword_enable_required;
+extern bool alarmTimerCallbacked;
 
 String exec_calledFunc(DynamicJsonDocument doc, String* calledFunc);
 

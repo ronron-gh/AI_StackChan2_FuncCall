@@ -10,6 +10,7 @@
 #include <AudioFileSourceBuffer.h>
 #include <AudioGeneratorMP3.h>
 #include "AudioFileSourceHTTPSStream.h"
+#include "AudioFileSourceSD.h"
 #include "AudioOutputM5Speaker.h"
 #include <ServoEasing.hpp> // https://github.com/ArminJo/ServoEasing       
 #include "WebVoiceVoxTTS.h"
@@ -19,6 +20,7 @@
 #include "rootCACertificate.h"
 #include "rootCAgoogle.h"
 #include <ArduinoJson.h>
+#include "SpiRamJsonDocument.h"
 #include <ESP32WebServer.h>
 //#include <ESPmDNS.h>
 #include "MailClient.h"
@@ -28,13 +30,75 @@
 #include "Whisper.h"
 #include "Audio.h"
 #include "CloudSpeechClient.h"
+#if defined(ENABLE_WAKEWORD)
 #include "WakeWord.h"
+#endif
 
 #include "FunctionCall.h"
 #include "ChatHistory.h"
 
 #if defined( ARDUINO_M5STACK_CORES3 )
 #include "HexLED.h"
+
+
+#if defined( ENABLE_FACE_DETECT )
+#include <esp_camera.h>
+#include <fb_gfx.h>
+#include <vector>
+#include "human_face_detect_msr01.hpp"
+#include "human_face_detect_mnp01.hpp"
+#define TWO_STAGE 1 /*<! 1: detect by two-stage which is more accurate but slower(with keypoints). */
+                    /*<! 0: detect by one-stage which is less accurate but faster(without keypoints). */
+
+#define FACE_COLOR_WHITE  0x00FFFFFF
+#define FACE_COLOR_BLACK  0x00000000
+#define FACE_COLOR_RED    0x000000FF
+#define FACE_COLOR_GREEN  0x0000FF00
+#define FACE_COLOR_BLUE   0x00FF0000
+#define FACE_COLOR_YELLOW (FACE_COLOR_RED | FACE_COLOR_GREEN)
+#define FACE_COLOR_CYAN   (FACE_COLOR_BLUE | FACE_COLOR_GREEN)
+#define FACE_COLOR_PURPLE (FACE_COLOR_BLUE | FACE_COLOR_RED)
+
+static camera_config_t camera_config = {
+    .pin_pwdn     = -1,
+    .pin_reset    = -1,
+    .pin_xclk     = 2,
+    .pin_sscb_sda = 12,
+    .pin_sscb_scl = 11,
+
+    .pin_d7 = 47,
+    .pin_d6 = 48,
+    .pin_d5 = 16,
+    .pin_d4 = 15,
+    .pin_d3 = 42,
+    .pin_d2 = 41,
+    .pin_d1 = 40,
+    .pin_d0 = 39,
+
+    .pin_vsync = 46,
+    .pin_href  = 38,
+    .pin_pclk  = 45,
+
+    .xclk_freq_hz = 20000000,
+    .ledc_timer   = LEDC_TIMER_0,
+    .ledc_channel = LEDC_CHANNEL_0,
+
+    .pixel_format = PIXFORMAT_RGB565,
+    //.pixel_format = PIXFORMAT_JPEG,
+    .frame_size   = FRAMESIZE_QVGA,   // QVGA(320x240)
+    .jpeg_quality = 0,
+    //.fb_count     = 2,
+    .fb_count     = 1,
+    .fb_location  = CAMERA_FB_IN_PSRAM,
+    .grab_mode    = CAMERA_GRAB_WHEN_EMPTY,
+};
+
+bool isSubWindowON = true;
+bool isSilentMode = false;
+
+#endif    //ENABLE_FACE_DETECT
+
+
 #endif
 
 // 保存する質問と回答の最大数
@@ -106,7 +170,9 @@ String TTS_SPEAKER = "&speaker=";
 String TTS_PARMS = TTS_SPEAKER + TTS_SPEAKER_NO;
 
 //---------------------------------------------
+#if defined(ENABLE_WAKEWORD)
 bool wakeword_is_enable = false;
+#endif
 //---------------------------------------------
 // C++11 multiline string constants are neato...
 static const char HEAD[] PROGMEM = R"KEWL(
@@ -218,11 +284,15 @@ static const char ROLE_HTML[] PROGMEM = R"KEWL(
 </body>
 </html>)KEWL";
 
+
+
 String speech_text = "";
 String speech_text_buffer = "";
 //DynamicJsonDocument chat_doc(1024*10);
-DynamicJsonDocument chat_doc(1024*30);
+//DynamicJsonDocument chat_doc(1024*30);
+SpiRamJsonDocument chat_doc(0);     // PSRAMから確保するように変更。サイズの確保はsetup()で実施（初期化後でないとPSRAMが使えないため）。
 
+// ChatGPTのJSONのテンプレートはFunctionCall.cppで定義
 //String json_ChatString = "{\"model\": \"gpt-3.5-turbo-0613\",\"messages\": [{\"role\": \"user\", \"content\": \"""\"}]}";
 //String Role_JSON = "";
 
@@ -330,11 +400,15 @@ String chatGpt(String json_string, String* calledFunc) {
   String response = "";
   avatar.setExpression(Expression::Doubt);
   avatar.setSpeechText("考え中…");
+#if defined( ARDUINO_M5STACK_CORES3 )  
   hex_led_ptn_thinking_start();
+#endif
   String ret = https_post_json("https://api.openai.com/v1/chat/completions", json_string.c_str(), root_ca_openai);
   avatar.setExpression(Expression::Neutral);
   avatar.setSpeechText("");
+#if defined( ARDUINO_M5STACK_CORES3 )
   hex_led_ptn_thinking_end();
+#endif
   Serial.println(ret);
   if(ret != ""){
     DynamicJsonDocument doc(2000);
@@ -655,6 +729,7 @@ AudioFileSourceBuffer *buff = nullptr;
 int preallocateBufferSize = 30*1024;
 uint8_t *preallocateBuffer;
 AudioFileSourceHTTPSStream *file = nullptr;
+AudioFileSourceSD *file_sd = nullptr;
 
 void playMP3(AudioFileSourceBuffer *buff){
   mp3->begin(buff, &out);
@@ -793,6 +868,9 @@ static box_t box_servo;
 static box_t box_stt;
 static box_t box_BtnA;
 static box_t box_BtnC;
+#if defined(ENABLE_FACE_DETECT)
+static box_t box_subWindow;
+#endif
 
 void Wifi_setup() {
   // 前回接続時情報で接続する
@@ -893,6 +971,159 @@ void time_sync(const char* ntpsrv, long gmt_offset, int daylight_offset) {
   }
 }
 
+
+
+#if defined(ENABLE_FACE_DETECT)
+esp_err_t camera_init(){
+
+    //initialize the camera
+    M5.In_I2C.release();
+    esp_err_t err = esp_camera_init(&camera_config);
+    if (err != ESP_OK) {
+        //Serial.println("Camera Init Failed");
+        M5.Display.println("Camera Init Failed");
+        return err;
+    }
+
+    return ESP_OK;
+}
+
+static void draw_face_boxes(fb_data_t *fb, std::list<dl::detect::result_t> *results, int face_id)
+{
+    int x, y, w, h;
+    uint32_t color = FACE_COLOR_YELLOW;
+    if (face_id < 0)
+    {
+        color = FACE_COLOR_RED;
+    }
+    else if (face_id > 0)
+    {
+        color = FACE_COLOR_GREEN;
+    }
+    if(fb->bytes_per_pixel == 2){
+        //color = ((color >> 8) & 0xF800) | ((color >> 3) & 0x07E0) | (color & 0x001F);
+        color = ((color >> 16) & 0x001F) | ((color >> 3) & 0x07E0) | ((color << 8) & 0xF800);
+    }
+    int i = 0;
+    for (std::list<dl::detect::result_t>::iterator prediction = results->begin(); prediction != results->end(); prediction++, i++)
+    {
+        // rectangle box
+        x = (int)prediction->box[0];
+        y = (int)prediction->box[1];
+
+        // yが負の数のときにfb_gfx_drawFastHLine()でメモリ破壊してリセットする不具合の対策
+        if(y < 0){
+           y = 0;
+        }
+
+        w = (int)prediction->box[2] - x + 1;
+        h = (int)prediction->box[3] - y + 1;
+
+        //Serial.printf("x:%d y:%d w:%d h:%d\n", x, y, w, h);
+
+        if((x + w) > fb->width){
+            w = fb->width - x;
+        }
+        if((y + h) > fb->height){
+            h = fb->height - y;
+        }
+
+        //Serial.printf("x:%d y:%d w:%d h:%d\n", x, y, w, h);
+
+        //fb_gfx_fillRect(fb, x+10, y+10, w-20, h-20, FACE_COLOR_RED);  //モザイク
+        fb_gfx_drawFastHLine(fb, x, y, w, color);
+        fb_gfx_drawFastHLine(fb, x, y + h - 1, w, color);
+        fb_gfx_drawFastVLine(fb, x, y, h, color);
+        fb_gfx_drawFastVLine(fb, x + w - 1, y, h, color);
+
+#if TWO_STAGE
+        // landmarks (left eye, mouth left, nose, right eye, mouth right)
+        int x0, y0, j;
+        for (j = 0; j < 10; j+=2) {
+            x0 = (int)prediction->keypoint[j];
+            y0 = (int)prediction->keypoint[j+1];
+            fb_gfx_fillRect(fb, x0, y0, 3, 3, color);
+        }
+#endif
+    }
+}
+
+
+void debug_check_heap_free_size(void){
+  Serial.printf("===============================================================\n");
+  Serial.printf("Mem Test\n");
+  Serial.printf("===============================================================\n");
+  Serial.printf("esp_get_free_heap_size()                              : %6d\n", esp_get_free_heap_size() );
+  Serial.printf("heap_caps_get_free_size(MALLOC_CAP_DMA)               : %6d\n", heap_caps_get_free_size(MALLOC_CAP_DMA) );
+  Serial.printf("heap_caps_get_free_size(MALLOC_CAP_SPIRAM)            : %6d\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM) );
+  Serial.printf("heap_caps_get_free_size(MALLOC_CAP_INTERNAL)          : %6d\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL) );
+  Serial.printf("heap_caps_get_free_size(MALLOC_CAP_DEFAULT)           : %6d\n", heap_caps_get_free_size(MALLOC_CAP_DEFAULT) );
+
+}
+
+
+bool camera_capture_and_face_detect(){
+  bool isDetected = false;
+
+  //acquire a frame
+  M5.In_I2C.release();
+  camera_fb_t * fb = esp_camera_fb_get();
+  if (!fb) {
+    //Serial.println("Camera Capture Failed");
+    M5.Display.println("Camera Capture Failed");
+    return ESP_FAIL;
+  }
+
+
+  int face_id = 0;
+
+#if TWO_STAGE
+  HumanFaceDetectMSR01 s1(0.1F, 0.5F, 10, 0.2F);
+  HumanFaceDetectMNP01 s2(0.5F, 0.3F, 5);
+  std::list<dl::detect::result_t> &candidates = s1.infer((uint16_t *)fb->buf, {(int)fb->height, (int)fb->width, 3});
+  std::list<dl::detect::result_t> &results = s2.infer((uint16_t *)fb->buf, {(int)fb->height, (int)fb->width, 3}, candidates);
+#else
+  HumanFaceDetectMSR01 s1(0.3F, 0.5F, 10, 0.2F);
+  std::list<dl::detect::result_t> &results = s1.infer((uint16_t *)fb->buf, {(int)fb->height, (int)fb->width, 3});
+#endif
+
+
+  
+  if (results.size() > 0) {
+    //Serial.printf("Face detected : %d\n", results.size());
+
+    isDetected = true;
+
+    fb_data_t rfb;
+    rfb.width = fb->width;
+    rfb.height = fb->height;
+    rfb.data = fb->buf;
+    rfb.bytes_per_pixel = 2;
+    rfb.format = FB_RGB565;
+
+    draw_face_boxes(&rfb, &results, face_id);
+
+  }
+
+  if(isSubWindowON){
+    avatar.updateSubWindow(fb->buf);
+  }
+
+  //Serial.println("\n<<< heap size before fb return >>>");  
+  //debug_check_heap_free_size();
+
+  //return the frame buffer back to the driver for reuse
+  esp_camera_fb_return(fb);
+
+  //Serial.println("<<< heap size after fb return >>>");  
+  //debug_check_heap_free_size();
+
+  return isDetected;
+}
+#endif  //ENABLE_FACE_DETECT
+
+
+
 void setup()
 {
   auto cfg = M5.config();
@@ -903,6 +1134,9 @@ void setup()
 //  cfg.output_power = true;
   M5.begin(cfg);
 
+  chat_doc = SpiRamJsonDocument(1024*30);
+
+  //TTS MP3用バッファ （PSRAMから確保される）
   preallocateBuffer = (uint8_t *)malloc(preallocateBufferSize);
   if (!preallocateBuffer) {
     M5.Display.printf("FATAL ERROR:  Unable to preallocate %d bytes for app\n", preallocateBufferSize);
@@ -1237,16 +1471,27 @@ void setup()
   mp3 = new AudioGeneratorMP3();
 //  mp3->RegisterStatusCB(StatusCallback, (void*)"mp3");
 
+#if defined(ENABLE_WAKEWORD)
   wakeword_init();
+#endif
 
+#if defined(ENABLE_FACE_DETECT)
+  avatar.init(16);
+#else
   avatar.init();
+#endif
   avatar.addTask(lipSync, "lipSync");
   avatar.addTask(servo, "servo");
   avatar.setSpeechFont(&fonts::efontJA_16);
 
 //  M5.Speaker.setVolume(200);
   box_servo.setupBox(80, 120, 80, 80);
+#if defined(ENABLE_FACE_DETECT)
+  box_stt.setupBox(107, 0, M5.Display.width()-107, 80);
+  box_subWindow.setupBox(0, 0, 107, 80);
+#else
   box_stt.setupBox(0, 0, M5.Display.width(), 60);
+#endif
   box_BtnA.setupBox(0, 100, 40, 60);
   box_BtnC.setupBox(280, 100, 40, 60);
 
@@ -1261,15 +1506,18 @@ void setup()
   hex_led_init();
   //hex_led_ptn_off();
   hex_led_ptn_boot();
-
+#if defined(ENABLE_FACE_DETECT)
+  camera_init();
+  avatar.set_isSubWindowEnable(true);
 #endif
+#endif
+
 
   //ヒープメモリ残量確認(デバッグ用)
   check_heap_free_size();
   check_heap_largest_free_block();
+
 }
-
-
 
 String random_words[18] = {"あなたは誰","楽しい","怒った","可愛い","悲しい","眠い","ジョークを言って","泣きたい","怒ったぞ","こんにちは","お疲れ様","詩を書いて","疲れた","お腹空いた","嫌いだ","苦しい","俳句を作って","歌をうたって"};
 int random_time = -1;
@@ -1279,13 +1527,17 @@ static int lastms1 = 0;
 void report_batt_level(){
   char buff[100];
   int level = M5.Power.getBatteryLevel();
+#if defined(ENABLE_WAKEWORD)
   mode = 0;
+#endif
   if(M5.Power.isCharging())
     sprintf(buff,"充電中、バッテリーのレベルは%d％です。",level);
   else
     sprintf(buff,"バッテリーのレベルは%d％です。",level);
   avatar.setExpression(Expression::Happy);
+#if defined(ENABLE_WAKEWORD)
   mode = 0; 
+#endif
   speech_text = String(buff);
   delay(1000);
   avatar.setExpression(Expression::Neutral);
@@ -1293,7 +1545,9 @@ void report_batt_level(){
 
 void switch_monologue_mode(){
     String tmp;
+#if defined(ENABLE_WAKEWORD)
     mode = 0;
+#endif
     if(random_speak) {
       tmp = "独り言始めます。";
       lastms1 = millis();
@@ -1304,7 +1558,9 @@ void switch_monologue_mode(){
     }
     random_speak = !random_speak;
     avatar.setExpression(Expression::Happy);
+#if defined(ENABLE_WAKEWORD)
     mode = 0;
+#endif
     speech_text = tmp;
     delay(1000);
     avatar.setExpression(Expression::Neutral);
@@ -1352,7 +1608,9 @@ void SST_ChatGPT() {
       hex_led_ptn_accept();
 #endif
       exec_chatGPT(ret);
+#if defined(ENABLE_WAKEWORD)
       mode = 0;
+#endif
     }
   } else {
 #if defined( ARDUINO_M5STACK_CORES3 )
@@ -1377,12 +1635,49 @@ void loop()
     random_time = 40000 + 1000 * random(30);
     if (!mp3->isRunning() && speech_text=="" && speech_text_buffer == "") {
       exec_chatGPT(random_words[random(18)]);
+#if defined(ENABLE_WAKEWORD)
       mode = 0;
+#endif
     }
   }
 
+  
+#if defined(ENABLE_FACE_DETECT)
+  //しゃべっていないときに顔検出を実行し、顔が検出されれば音声認識を開始。
+  if (!mp3->isRunning() && speech_text=="" && speech_text_buffer == "") {
+    bool isFaceDetected;
+    isFaceDetected = camera_capture_and_face_detect();
+    if(!isSilentMode){
+      if(isFaceDetected){
+        avatar.set_isSubWindowEnable(false);
+        sw_tone();
+        SST_ChatGPT();                              //音声認識
+        //exec_chatGPT(random_words[random(18)]);   //独り言
+
+        // フレームバッファを読み捨てる（ｽﾀｯｸﾁｬﾝが応答した後に、過去のフレームで顔検出してしまうのを防ぐため）
+        M5.In_I2C.release();
+        camera_fb_t *fb = esp_camera_fb_get();
+        esp_camera_fb_return(fb);
+      }
+    }
+    else{
+      if(isFaceDetected){
+        avatar.setExpression(Expression::Happy);
+        //delay(2000);
+        //avatar.setExpression(Expression::Neutral);
+      }
+      else{
+        avatar.setExpression(Expression::Neutral);
+      }
+    }
+
+  }
+#endif
+
   if(speech_text=="" && speech_text_buffer == ""){
     M5.update();
+
+#if defined(ENABLE_WAKEWORD)
     if (M5.BtnA.wasPressed() || wakeword_enable_required)
     {
       wakeword_enable_required = false;
@@ -1423,6 +1718,7 @@ void loop()
   #endif
       avatar.setSpeechText("ウェイクワード登録開始");
     }
+#endif  //ENABLE_WAKEWORD
 
     if (M5.BtnC.wasPressed())
     {
@@ -1440,6 +1736,9 @@ void loop()
       {          
         if (box_stt.contain(t.x, t.y)&&(!mp3->isRunning()))
         {
+#if defined(ENABLE_FACE_DETECT)
+          avatar.set_isSubWindowEnable(false);
+#endif
           sw_tone();
           SST_ChatGPT();
         }
@@ -1453,14 +1752,36 @@ void loop()
 #endif
         if (box_BtnA.contain(t.x, t.y))
         {
+#if defined(ENABLE_FACE_DETECT)
+          isSilentMode = !isSilentMode;
+          if(isSilentMode){
+            avatar.setSpeechText("サイレントモード");
+          }
+          else{
+            avatar.setSpeechText("サイレントモード解除");
+          }
+          delay(2000);
+          avatar.setSpeechText("");
+#else
           sw_tone();
           switch_monologue_mode();
+#endif
         }
         if (box_BtnC.contain(t.x, t.y))
         {
+#if defined(ENABLE_FACE_DETECT)
+          avatar.set_isSubWindowEnable(false);
+#endif
           sw_tone();
           report_batt_level();
         }
+#if defined(ENABLE_FACE_DETECT)
+        if (box_subWindow.contain(t.x, t.y))
+        {
+          isSubWindowON = !isSubWindowON;
+          avatar.set_isSubWindowEnable(isSubWindowON);
+        }
+#endif //ENABLE_FACE_DETECT
       }
     }
 #endif
@@ -1472,11 +1793,45 @@ void loop()
     speech_text = "";
     M5.Mic.end();
     M5.Speaker.begin();
+#if defined(ENABLE_WAKEWORD)
     mode = 0;
+#endif
     Voicevox_tts((char*)speech_text_buffer.c_str(), (char*)TTS_PARMS.c_str());
   }
 
-  if (mp3->isRunning()) {
+  
+  if (alarmTimerCallbacked  && !mp3->isRunning()) {
+    alarmTimerCallbacked = false;
+#if defined(ENABLE_FACE_DETECT)
+    avatar.set_isSubWindowEnable(false);
+#endif    
+    SD.begin(GPIO_NUM_4, SPI, 25000000);
+    Serial.println("SD.begin");
+    file_sd = new AudioFileSourceSD("/alarm.mp3");
+    Serial.println("Open mp3");
+    
+    if( !file_sd->isOpen() ){
+      delete file_sd;
+      file_sd = nullptr;
+      //Serial.println("failed to open mp3 file");
+      //mp3がない場合はｽﾀｯｸﾁｬﾝがしゃべる
+      speech_text = "時間になりました。";
+    }
+    else{
+      avatar.setExpression(Expression::Happy);
+      M5.Mic.end();
+      M5.Speaker.begin();
+#if defined(ENABLE_WAKEWORD)
+      mode = 0;
+#endif
+      mp3->begin(file_sd, &out);
+
+    }
+    //SD.end();   //SD.end()はloop()で再生終了後に実施する
+  }
+
+  //if (mp3->isRunning()) {
+  while(mp3->isRunning()) {
     if (!mp3->loop()) {
       mp3->stop();
       if(file != nullptr){delete file; file = nullptr;}
@@ -1487,14 +1842,32 @@ void loop()
       delay(200);
       M5.Speaker.end();
       M5.Mic.begin();
+
+      //SDカードのmp3ファイルを再生している場合
+      if(file_sd != nullptr){
+        delete file_sd;
+        file_sd = nullptr;
+        SD.end();
+      }
+
+#if defined(ENABLE_WAKEWORD)
       if(wakeword_is_enable) mode = 1;
       else  mode = 0;
+#endif
+
+#if defined(ENABLE_FACE_DETECT)
+      if(isSubWindowON){
+        avatar.set_isSubWindowEnable(true);
+      }
+#endif  //ENABLE_FACE_DETECT
     }
     delay(1);
-  } else {
-  server.handleClient();
+//  } else {
+//    server.handleClient();
   }
-
+  server.handleClient();
+  
+#if defined(ENABLE_WAKEWORD)
   if (mode == 0) { /* return; */ }
   else if (mode < 0) {
     if(wakeword_regist()){
@@ -1515,6 +1888,7 @@ void loop()
         SST_ChatGPT();
     }
   }
+#endif  //ENABLE_WAKEWORD
 
   if(readMailTimerCallbacked && !mp3->isRunning()){
     Serial.println("loop task: imapReadMail()");
@@ -1530,7 +1904,8 @@ void loop()
     }
 
     //ヒープメモリ残量確認(デバッグ用)
-    //check_heap_largest_free_block();
+    check_heap_free_size();
+    check_heap_largest_free_block();
   }
 
 #if defined( ARDUINO_M5STACK_CORES3 )
@@ -1545,7 +1920,7 @@ void check_heap_free_size(void){
   Serial.printf("===============================================================\n");
   Serial.printf("Check free heap size\n");
   Serial.printf("===============================================================\n");
-  Serial.printf("esp_get_free_heap_size()                              : %6d\n", esp_get_free_heap_size() );
+  //Serial.printf("esp_get_free_heap_size()                              : %6d\n", esp_get_free_heap_size() );
   Serial.printf("heap_caps_get_free_size(MALLOC_CAP_DMA)               : %6d\n", heap_caps_get_free_size(MALLOC_CAP_DMA) );
   Serial.printf("heap_caps_get_free_size(MALLOC_CAP_SPIRAM)            : %6d\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM) );
   Serial.printf("heap_caps_get_free_size(MALLOC_CAP_INTERNAL)          : %6d\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL) );
