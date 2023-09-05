@@ -78,8 +78,8 @@ alarm.mp3という名前でSDカードに保存しておくと、タイマー機
 （MP3ファイルがない場合は、ｽﾀｯｸﾁｬﾝが「時間になりました」と話します。）
 
 ## ウェイクワード対応
-v0.2.0からウェイクワードにも対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。
-※v0.5.0以降、カメラ＆顔検出のためにメモリを節約するため、ウェイクワードはplatformio.iniで無効化されています。
+v0.2.0からウェイクワードにも対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。  
+※v0.5.0以降、カメラ＆顔検出のためにメモリを節約するため、ウェイクワードはplatformio.iniで以下のように無効化されています。ウェイクワードを有効化する場合、カメラ＆顔検出（-DENABLE_FACE_DETECT）は無効化することを推奨します。
 ```
 build_flags=
   -DBOARD_HAS_PSRAM
