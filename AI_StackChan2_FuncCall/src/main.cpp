@@ -10,7 +10,8 @@
 #include <AudioFileSourceBuffer.h>
 #include <AudioGeneratorMP3.h>
 #include "AudioFileSourceHTTPSStream.h"
-#include "AudioFileSourceSD.h"
+//#include "AudioFileSourceSD.h"
+#include "AudioFileSourceSPIFFS.h"
 #include "AudioOutputM5Speaker.h"
 #include <ServoEasing.hpp> // https://github.com/ArminJo/ServoEasing       
 #include "WebVoiceVoxTTS.h"
@@ -729,7 +730,8 @@ AudioFileSourceBuffer *buff = nullptr;
 int preallocateBufferSize = 30*1024;
 uint8_t *preallocateBuffer;
 AudioFileSourceHTTPSStream *file = nullptr;
-AudioFileSourceSD *file_sd = nullptr;
+//AudioFileSourceSD *file_sd = nullptr;
+AudioFileSourceSPIFFS *file_sd = nullptr;
 
 void playMP3(AudioFileSourceBuffer *buff){
   mp3->begin(buff, &out);
@@ -1123,6 +1125,70 @@ bool camera_capture_and_face_detect(){
 #endif  //ENABLE_FACE_DETECT
 
 
+// SDカードのファイルをSPIFFSにコピー
+bool copySDFileToSPIFFS(const char *path) {
+  //const char *path = "/alarm.mp3";
+  
+  Serial.println("Copy SD File to SPIFFS.");
+
+  if(!SPIFFS.begin(true)){
+    Serial.println("Failed to mount SPIFFS.");
+    return false;
+  }
+
+  if (!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+    Serial.println("Failed to mount SD.");
+    return false;
+  }
+
+  File fsrc = SD.open("/alarm.mp3", FILE_READ);
+  File fdst = SPIFFS.open("/alarm.mp3", FILE_WRITE);
+  if(!fsrc || !fdst) {
+    Serial.println("Failed to open file.");
+    return false;
+  }
+
+  uint8_t *buf = new uint8_t[4096];
+  if (!buf) {
+	  Serial.println("Failed to allocate buffer.");
+	  return false;
+  }
+
+  size_t len, size, ret;
+  size = len = fsrc.size();
+  while (len) {
+	  size_t s = len;
+	  if (s > 4096){
+		  s = 4096;
+    }  
+
+	  fsrc.read(buf, s);
+	  if ((ret = fdst.write(buf, s)) < s) {
+		  Serial.printf("write failed: %d - %d\n", ret, s);
+		  return false;
+	  }
+	  len -= s;
+	  Serial.printf("%d / %d\n", size - len, size);
+  }
+ 
+  delete[] buf;
+  fsrc.close();
+  fdst.close();
+
+  if (!SPIFFS.exists(path)) {
+	  Serial.println("no file in SPIFFS.");
+	  return false;
+  }
+  fdst = SPIFFS.open(path);
+  len = fdst.size();
+  fdst.close();
+  if (len != size) {
+	 Serial.println("size not match.");
+	 return false;
+  }
+  Serial.println("*** Done. ***\r\n");
+  return true;
+}
 
 void setup()
 {
@@ -1455,9 +1521,15 @@ void setup()
       Serial.println("Failed to open file for reading");
       init_chat_doc(json_ChatString.c_str());
     }
+
   } else {
     Serial.println("An Error has occurred while mounting SPIFFS");
   }
+
+  //SDカードのMP3ファイル（アラーム用）をSPIFFSにコピー
+  copySDFileToSPIFFS("/alarm.mp3");
+  SD.end();
+  SPIFFS.end();
 
   server.begin();
   Serial.println("HTTP server started");
@@ -1799,15 +1871,16 @@ void loop()
     Voicevox_tts((char*)speech_text_buffer.c_str(), (char*)TTS_PARMS.c_str());
   }
 
-  
+
   if (alarmTimerCallbacked  && !mp3->isRunning()) {
     alarmTimerCallbacked = false;
 #if defined(ENABLE_FACE_DETECT)
     avatar.set_isSubWindowEnable(false);
 #endif    
-    SD.begin(GPIO_NUM_4, SPI, 25000000);
-    Serial.println("SD.begin");
-    file_sd = new AudioFileSourceSD("/alarm.mp3");
+    //SD.begin(GPIO_NUM_4, SPI, 25000000);
+    SPIFFS.begin();
+    //file_sd = new AudioFileSourceSD("/alarm.mp3");
+    file_sd = new AudioFileSourceSPIFFS("/alarm.mp3");
     Serial.println("Open mp3");
     
     if( !file_sd->isOpen() ){
@@ -1847,7 +1920,8 @@ void loop()
       if(file_sd != nullptr){
         delete file_sd;
         file_sd = nullptr;
-        SD.end();
+        //SD.end();
+        SPIFFS.end();
       }
 
 #if defined(ENABLE_WAKEWORD)
