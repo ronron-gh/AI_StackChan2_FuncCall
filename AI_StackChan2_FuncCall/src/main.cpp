@@ -25,6 +25,7 @@
 #include <ESP32WebServer.h>
 //#include <ESPmDNS.h>
 #include "MailClient.h"
+#include <ESP8266FtpServer.h>
 
 //#include <deque>
 #include "AudioWhisper.h"
@@ -140,7 +141,6 @@ const char* NTPSRV      = "ntp.jst.mfeed.ad.jp";    // NTPサーバーアドレ�
 const long  GMT_OFFSET  = 9 * 3600;                 // GMT-TOKYO(時差９時間）9 hours time difference.
 const int   DAYLIGHT_OFFSET = 0;                    // サマータイム設定なし No daylight saving time setting
 
-
 /// 関数プロトタイプ宣言 /// 
 void exec_chatGPT(String text);
 void check_heap_free_size(void);
@@ -161,6 +161,7 @@ const Expression expressions_table[] = {
 };
 
 ESP32WebServer server(80);
+FtpServer ftpSrv;   //set #define FTP_DEBUG in ESP8266FtpServer.h to see ftp verbose on serial
 
 //---------------------------------------------
 String OPENAI_API_KEY = "";
@@ -1126,14 +1127,18 @@ bool camera_capture_and_face_detect(){
 
 
 // SDカードのファイルをSPIFFSにコピー
-bool copySDFileToSPIFFS(const char *path) {
-  //const char *path = "/alarm.mp3";
+bool copySDFileToSPIFFS(const char *path, bool forced) {
   
   Serial.println("Copy SD File to SPIFFS.");
 
   if(!SPIFFS.begin(true)){
     Serial.println("Failed to mount SPIFFS.");
     return false;
+  }
+
+  if (SPIFFS.exists(path) && !forced) {
+	  Serial.println("File already exists in SPIFFS.");
+	  return true;
   }
 
   if (!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
@@ -1413,7 +1418,7 @@ void setup()
       Serial.println("Failed to SD.open().");    
     }
 
-    SD.end();
+    //SD.end();
   } else {
     WiFi.begin();
     weatherCityID = "130010";
@@ -1526,15 +1531,19 @@ void setup()
     Serial.println("An Error has occurred while mounting SPIFFS");
   }
 
-  //SDカードのMP3ファイル（アラーム用）をSPIFFSにコピー
-  copySDFileToSPIFFS("/alarm.mp3");
-  SD.end();
-  SPIFFS.end();
+  //SDカードのMP3ファイル（アラーム用）をSPIFFSにコピーする（SDカードだと音が途切れ途切れになるため）。
+  //すでにSPIFFSにファイルがあればコピーはしない。強制的にコピー（上書き）したい場合は第2引数をtrueにする。
+  copySDFileToSPIFFS("/alarm.mp3", false);
 
   server.begin();
   Serial.println("HTTP server started");
   M5.Lcd.println("HTTP server started");  
-  
+
+  ftpSrv.begin("stackchan","stackchan");    //username, password for ftp.  set ports in ESP8266FtpServer.h  (default 21, 50009 for PASV)
+  Serial.println("FTP server started");
+  M5.Lcd.println("FTP server started");  
+
+
   Serial.printf_P(PSTR("/ to control the chatGpt Server.\n"));
   M5.Lcd.print("/ to control the chatGpt Server.\n");
   delay(3000);
@@ -1639,11 +1648,13 @@ void switch_monologue_mode(){
 }
 
 void sw_tone(){
+#if 1
   M5.Mic.end();
     M5.Speaker.tone(1000, 100);
   delay(500);
     M5.Speaker.end();
   M5.Mic.begin();
+#endif
 }
 
 void SST_ChatGPT() {
@@ -1877,30 +1888,32 @@ void loop()
 #if defined(ENABLE_FACE_DETECT)
     avatar.set_isSubWindowEnable(false);
 #endif    
-    //SD.begin(GPIO_NUM_4, SPI, 25000000);
-    SPIFFS.begin();
-    //file_sd = new AudioFileSourceSD("/alarm.mp3");
-    file_sd = new AudioFileSourceSPIFFS("/alarm.mp3");
-    Serial.println("Open mp3");
-    
-    if( !file_sd->isOpen() ){
-      delete file_sd;
-      file_sd = nullptr;
-      //Serial.println("failed to open mp3 file");
-      //mp3がない場合はｽﾀｯｸﾁｬﾝがしゃべる
-      speech_text = "時間になりました。";
+    //if(!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+    if(!SPIFFS.begin(true)){
+      Serial.println("Failed to mount SPIFFS.");
     }
     else{
-      avatar.setExpression(Expression::Happy);
-      M5.Mic.end();
-      M5.Speaker.begin();
+      //file_sd = new AudioFileSourceSD("/alarm.mp3");
+      file_sd = new AudioFileSourceSPIFFS("/alarm.mp3");
+      Serial.println("Open mp3");
+      
+      if( !file_sd->isOpen() ){
+        delete file_sd;
+        file_sd = nullptr;
+        //Serial.println("failed to open mp3 file");
+        //mp3がない場合はｽﾀｯｸﾁｬﾝがしゃべる
+        speech_text = "時間になりました。";
+      }
+      else{
+        avatar.setExpression(Expression::Happy);
+        M5.Mic.end();
+        M5.Speaker.begin();
 #if defined(ENABLE_WAKEWORD)
-      mode = 0;
+        mode = 0;
 #endif
-      mp3->begin(file_sd, &out);
-
+        mp3->begin(file_sd, &out);
+      }
     }
-    //SD.end();   //SD.end()はloop()で再生終了後に実施する
   }
 
   //if (mp3->isRunning()) {
@@ -1920,8 +1933,6 @@ void loop()
       if(file_sd != nullptr){
         delete file_sd;
         file_sd = nullptr;
-        //SD.end();
-        SPIFFS.end();
       }
 
 #if defined(ENABLE_WAKEWORD)
@@ -1940,6 +1951,7 @@ void loop()
 //    server.handleClient();
   }
   server.handleClient();
+  ftpSrv.handleFTP();
   
 #if defined(ENABLE_WAKEWORD)
   if (mode == 0) { /* return; */ }
@@ -1965,9 +1977,11 @@ void loop()
 #endif  //ENABLE_WAKEWORD
 
   if(readMailTimerCallbacked && !mp3->isRunning()){
+    avatar.setSpeechText("受信メール確認中");
     Serial.println("loop task: imapReadMail()");
     imapReadMail();
     readMailTimerCallbacked = false;
+    avatar.setSpeechText("");
 
     int nMail = recvMessages.size();
     if(nMail > prev_nMail){

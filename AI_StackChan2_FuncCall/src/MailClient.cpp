@@ -66,7 +66,7 @@ void imapCallback(IMAP_Status status)
         /* Get the message list from the message list data */
         IMAP_MSG_List msgList = imap.data();
 
-        //printMessages(msgList.msgItems, imap.headerOnly());
+        printMessages(msgList.msgItems, imap.headerOnly());
 
         // 受信したメッセージをキューに格納
         IMAP_MSG_Item msg = msgList.msgItems[0];
@@ -302,7 +302,7 @@ void imapReadMail(void){
 
   /* Set the limit of number of messages in the search results */
   //imap_data.limit.search = 5;
-  imap_data.limit.search = 1;
+  imap_data.limit.search = 1;      //TODO 本当は3通くらい受信したいが、現状、既読メールを毎回受信してしまうので、1にしておく
 
   /** Set the maximum size of message stored in
    * IMAPSession object in byte
@@ -380,6 +380,9 @@ void imapReadMail(void){
   /*  {Optional} */
   printSelectedMailboxInfo(imap.selectedFolder());
 
+  //TODO 未読メールがなければ受信せずにcloseSessionしたい
+
+
   /** Message UID to fetch or read e.g. 100.
    * In this case we will get the UID from the max message number (lastest message)
    */
@@ -416,6 +419,7 @@ void imapReadMail(void){
   // When message was fetched or read, the /Seen flag will not set or message remained in unseen or unread status,
   // as this is the purpose of library (not UI application), user can set the message status as read by set \Seen flag
   // to message, see the Set_Flags.ino example.
+
   MailClient.readMail(&imap, false);
 
   /* Clear all stored data in IMAPSession object */

@@ -23,8 +23,8 @@ static String timer(int32_t time, const char* action);
 static String timer_change(int32_t time);
 
 String json_ChatString = 
-"{\"model\": \"gpt-3.5-turbo-16k-0613\","
-//"{\"model\": \"gpt-4-0613\","
+"{\"model\": \"gpt-3.5-turbo\","
+//"{\"model\": \"gpt-4\","
 "\"messages\": [{\"role\": \"user\", \"content\": \"\"}],"
 "\"functions\": ["
   "{"
