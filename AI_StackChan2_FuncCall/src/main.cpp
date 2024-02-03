@@ -103,6 +103,9 @@ bool isSilentMode = false;
 
 #endif
 
+
+String avatarText;
+
 // 保存する質問と回答の最大数
 //const int MAX_HISTORY = 5;
 const int MAX_HISTORY = 20;
@@ -1992,8 +1995,20 @@ void loop()
     }
 
     //ヒープメモリ残量確認(デバッグ用)
-    check_heap_free_size();
-    check_heap_largest_free_block();
+    //check_heap_free_size();
+    //check_heap_largest_free_block();
+  }
+
+  if(xAlarmTimer != NULL){
+    TickType_t xRemainingTime;
+
+    /* Query the period of the timer that expires. */
+    xRemainingTime = xTimerGetExpiryTime( xAlarmTimer ) - xTaskGetTickCount();
+    avatarText = "残り" + String(xRemainingTime / 1000) + "秒";
+    avatar.setSpeechText(avatarText.c_str());
+  }
+  else{
+    avatar.setSpeechText("");
   }
 
 #if defined( ARDUINO_M5STACK_CORES3 )

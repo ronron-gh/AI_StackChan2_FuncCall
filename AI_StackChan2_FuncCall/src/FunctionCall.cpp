@@ -15,7 +15,7 @@ extern String speech_text;
 extern String speech_text_buffer;
 extern AudioGeneratorMP3 *mp3;
 
-TimerHandle_t xTimer, xOffTimer;
+TimerHandle_t xAlarmTimer;
 void alarmTimerCallback(TimerHandle_t xTimer);
 void powerOffTimerCallback(TimerHandle_t xTimer);
 
@@ -188,14 +188,14 @@ String json_ChatString =
 
 bool alarmTimerCallbacked = false;
 void alarmTimerCallback(TimerHandle_t _xTimer){
-  xTimer = NULL;
+  xAlarmTimer = NULL;
   Serial.println("時間になりました。");
 
   alarmTimerCallbacked = true;
 }
 
 void powerOffTimerCallback(TimerHandle_t _xTimer){
-  xTimer = NULL;
+  xAlarmTimer = NULL;
   Serial.println("おやすみなさい。");
   avatar.setSpeechText("おやすみなさい。");
   delay(2000);
@@ -206,14 +206,14 @@ void powerOffTimerCallback(TimerHandle_t _xTimer){
 String timer(int32_t time, const char* action){
   String response = "";
 
-  if(xTimer != NULL){
+  if(xAlarmTimer != NULL){
     response = "別のタイマーを実行中です。";
   }
   else{
     if(strcmp(action, "alarm") == 0){
-      xTimer = xTimerCreate("Timer", time * 1000, pdFALSE, 0, alarmTimerCallback);
-      if(xTimer != NULL){
-        xTimerStart(xTimer, 0);
+      xAlarmTimer = xTimerCreate("Timer", time * 1000, pdFALSE, 0, alarmTimerCallback);
+      if(xAlarmTimer != NULL){
+        xTimerStart(xAlarmTimer, 0);
         response = String(time) + "秒後にalarmをセットしました。";
       }
       else{
@@ -221,9 +221,9 @@ String timer(int32_t time, const char* action){
       }
     }
     else if(strcmp(action, "shutdown") == 0){
-      xTimer = xTimerCreate("Timer", time * 1000, pdFALSE, 0, powerOffTimerCallback);
-      if(xTimer != NULL){
-        xTimerStart(xTimer, 0);
+      xAlarmTimer = xTimerCreate("Timer", time * 1000, pdFALSE, 0, powerOffTimerCallback);
+      if(xAlarmTimer != NULL){
+        xTimerStart(xAlarmTimer, 0);
         response = String(time) + "秒後にパワーオフします。";
       }
       else{
@@ -239,12 +239,12 @@ String timer(int32_t time, const char* action){
 String timer_change(int32_t time){
   String response = "";
   if(time == 0){
-    xTimerDelete(xTimer, 0);
-    xTimer = NULL;
+    xTimerDelete(xAlarmTimer, 0);
+    xAlarmTimer = NULL;
     response = "タイマーをキャンセルしました。";
   }
   else{
-    xTimerChangePeriod(xTimer, time * 1000, 0);
+    xTimerChangePeriod(xAlarmTimer, time * 1000, 0);
     response = "タイマーの設定時間を" + String(time) + "秒に変更しました。";
   }
 

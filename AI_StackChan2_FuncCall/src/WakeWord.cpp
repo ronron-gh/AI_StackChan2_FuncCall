@@ -6,6 +6,7 @@
 #include <SPIFFS.h>
 
 #include "simplevox.h"
+#include "WakeWord.h"
 
 #define base_path "/spiffs"
 #define file_name "/wakeword.bin"
@@ -261,7 +262,7 @@ bool wakeword_compare()
     std::unique_ptr<simplevox::MfccFeature> feature(mfccEngine.create(features, mfccFrameCount, mfccCoefNum));
     const auto dist = simplevox::calcDTW(*mfcc, *feature);
     char cbuf[64];
-    char pass = (dist < 180) ? '!': '?';  // 180未満で一致と判定, しきい値は要調整
+    char pass = (dist < DIST_THRESHOLD) ? '!': '?';  // 閾値未満で一致と判定, しきい値は要調整
     sprintf(cbuf, "Dist: %6lu, %c", dist, pass);
     //M5.Display.drawString(cbuf, 0, 50);
     Serial.println(String(cbuf));
@@ -270,7 +271,7 @@ bool wakeword_compare()
     vadEngine.reset();
     //mode = 0;
 //    M5.Mic.end();
-    if(dist < 180) ret = true;
+    if(dist < DIST_THRESHOLD) ret = true;
   }    
   return ret;
 }
