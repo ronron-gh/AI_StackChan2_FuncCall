@@ -9,7 +9,9 @@
 #include "WakeWord.h"
 
 #define base_path "/spiffs"
-#define file_name "/wakeword.bin"
+#define filename_base "/wakeword"
+//const String file_name[REGISTER_MAX] = {"/wakeword0.bin","/wakeword1.bin","/wakeword2.bin","/wakeword3.bin","/wakeword4.bin",
+//                              "/wakeword5.bin","/wakeword6.bin","/wakeword7.bin","/wakeword8.bin","/wakeword9.bin"};
 constexpr int kSampleRate = 16000;
 constexpr int audioLength = kSampleRate * 3;  // 3 seconds
 constexpr int kRxBufferNum = 3;
@@ -19,7 +21,8 @@ int16_t* rawBuffer;
 ns_handle_t nsInst;
 simplevox::VadEngine vadEngine;
 simplevox::MfccEngine mfccEngine;
-simplevox::MfccFeature* mfcc = nullptr;
+//simplevox::MfccFeature* mfcc = nullptr;
+simplevox::MfccFeature* mfcc[REGISTER_MAX] = {nullptr};
 
 LGFX_Button regButton;
 LGFX_Button cmpButton;
@@ -156,31 +159,44 @@ void wakeword_init(){
   if (nsInst == NULL)
   {
     M5.Display.println("Failed to initialize ns.");
+    Serial.println("Failed to initialize ns.");
     while(true) delay(10);
   }
   if (!vadEngine.init(vadConfig))
   {
     M5.Display.println("Failed to initialize vad.");
+    Serial.println("Failed to initialize vad.");
     while(true) delay(10);
   }
   if (!mfccEngine.init(mfccConfig))
   {
     M5.Display.println("Failed to initialize mfcc.");
+    Serial.println("Failed to initialize mfcc.");
     while(true) delay(10);
   }
   
   SPIFFS.begin(true);
-  if (SPIFFS.exists(file_name))
-  {
-    M5.Display.println("File exists !!");
-    mfcc = mfccEngine.loadFile(base_path file_name);
-    //mode = 1;
+  for(int i=0; i<REGISTER_MAX; i++){
+    String filename = filename_base + String(i) + String(".bin");
+    //if (SPIFFS.exists(file_name[i].c_str()))
+    if (SPIFFS.exists(filename.c_str()))
+    {
+      //String path = base_path + file_name[i];
+      String path = base_path + filename;
+      M5.Display.printf("File exists !! %s\n", path.c_str());
+      Serial.printf("File exists !! %s\n", path.c_str());
+
+      mfcc[i] = mfccEngine.loadFile(path.c_str());
+      //mode = 1;
+    }
+
   }
 }
 
-bool wakeword_regist() // 検出した音声を再生しMFCCを登録及びファイルに保存します
+int wakeword_regist() // 検出した音声を再生しMFCCを登録及びファイルに保存します
 {
-  bool ret =false;
+  //bool ret =false;
+  int ret = -1;
   // M5.Speaker.end();
   // M5.Mic.begin();
   auto* data = rxMic();
@@ -200,13 +216,25 @@ bool wakeword_regist() // 検出した音声を再生しMFCCを登録及びフ�
     M5.Speaker.end();
   }
   M5.Mic.begin();
-  if (mfcc != nullptr){ delete mfcc; }
-  mfcc = mfccEngine.create(rawAudio, length);
-  if (mfcc)
+
+  //if (mfcc != nullptr){ delete mfcc; }
+  simplevox::MfccFeature* mfcc_tmp = nullptr;
+  mfcc_tmp = mfccEngine.create(rawAudio, length);
+  if (mfcc_tmp)
   {
-    mfccEngine.saveFile(base_path file_name, *mfcc);
-    //mode = 1;
-    ret = true;
+    for(int i=0; i<REGISTER_MAX; i++){
+      String filename = filename_base + String(i) + String(".bin");
+      if(mfcc[i] == nullptr){
+        String path = base_path + filename;
+        mfccEngine.saveFile(path.c_str(), *mfcc_tmp);
+        mfcc[i] = mfcc_tmp;
+        //mode = 1;
+        //ret = true;
+        ret = i;
+        Serial.printf("Registered: %s\n", path.c_str());
+        break;
+      }    
+    }
   }
   vadEngine.reset();
 //  mode = 0;
@@ -214,11 +242,12 @@ bool wakeword_regist() // 検出した音声を再生しMFCCを登録及びフ�
   return ret;
 }
 
-bool wakeword_compare()  
+int wakeword_compare()  
 {
   // M5.Speaker.end();
   // M5.Mic.begin();
-  bool ret = false;
+  //bool ret = false;
+  int ret = -1;
   auto* data = rxMic();
   // M5.Speaker.begin();
   if (data == nullptr) {
@@ -260,18 +289,29 @@ bool wakeword_compare()
       || (state >= simplevox::VadState::Speech && mfccFrameNum <= mfccFrameCount))
   {
     std::unique_ptr<simplevox::MfccFeature> feature(mfccEngine.create(features, mfccFrameCount, mfccCoefNum));
-    const auto dist = simplevox::calcDTW(*mfcc, *feature);
-    char cbuf[64];
-    char pass = (dist < DIST_THRESHOLD) ? '!': '?';  // 閾値未満で一致と判定, しきい値は要調整
-    sprintf(cbuf, "Dist: %6lu, %c", dist, pass);
-    //M5.Display.drawString(cbuf, 0, 50);
-    Serial.println(String(cbuf));
+    
+    for(int i=0; i<REGISTER_MAX; i++){
+      if(mfcc[i] != nullptr){
+        const auto dist = simplevox::calcDTW(*(mfcc[i]), *feature);
+        char cbuf[64];
+        char pass = (dist < DIST_THRESHOLD) ? '!': '?';  // 閾値未満で一致と判定, しきい値は要調整
+        sprintf(cbuf, "Dist #%d: %6lu, %c", i, dist, pass);
+        //M5.Display.drawString(cbuf, 0, 50);
+        Serial.println(String(cbuf));
+        if(dist < DIST_THRESHOLD){
+          //ret = true;
+          ret = i;
+          Serial.printf("Matched #%d wakeword\n", i);
+          break;
+        }
+      } 
+    }
     raw_reset();
     mfccFrameCount = 0;
     vadEngine.reset();
     //mode = 0;
 //    M5.Mic.end();
-    if(dist < DIST_THRESHOLD) ret = true;
+    //if(dist < DIST_THRESHOLD) ret = true;
   }    
   return ret;
 }
