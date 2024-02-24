@@ -8,6 +8,11 @@
 //#include "AudioOutputM5Speaker.h"
 #include "SpiRamJsonDocument.h"
 
+String VOICEVOX_API_KEY = "";
+String TTS_SPEAKER_NO = "3";
+String TTS_SPEAKER = "&speaker=";
+String TTS_PARMS = TTS_SPEAKER + TTS_SPEAKER_NO;
+
 //-----------------------------------------------------
 extern String VOICEVOX_API_KEY;
 extern AudioGeneratorMP3 *mp3;

@@ -190,7 +190,7 @@ bool alarmTimerCallbacked = false;
 void alarmTimerCallback(TimerHandle_t _xTimer){
   xAlarmTimer = NULL;
   Serial.println("時間になりました。");
-
+  avatar.setSpeechText("");
   alarmTimerCallbacked = true;
 }
 
