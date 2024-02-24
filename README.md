@@ -2,11 +2,30 @@
 OpenAIのFunction Callingを使って、robo8080さんの[AIｽﾀｯｸﾁｬﾝ2](https://github.com/robo8080/AI_StackChan2)に様々な機能を追加しました。  
 
 ※Function Callingを使わない通常の会話もできます。  
+<br>
+
+---
+
+- [AI\_StackChan2\_FuncCall](#ai_stackchan2_funccall)
+  - [開発環境](#開発環境)
+  - [Function Callingで呼び出せる機能](#function-callingで呼び出せる機能)
+  - [各種設定ファイル](#各種設定ファイル)
+      - [●各種APIキー](#各種apiキー)
+      - [●メール送受信用のGmailアカウント、アプリパスワード](#メール送受信用のgmailアカウントアプリパスワード)
+      - [●バス（電車）の時刻表](#バス電車の時刻表)
+      - [●天気予報のCity ID](#天気予報のcity-id)
+      - [●アラーム音のMP3](#アラーム音のmp3)
+  - [その他追加した機能](#その他追加した機能)
+    - [ウェイクワード対応](#ウェイクワード対応)
+    - [LEDパネルによる状態表示（CoreS3のみ）](#ledパネルによる状態表示cores3のみ)
+    - [カメラによる顔検出（CoreS3のみ）](#カメラによる顔検出cores3のみ)
+  - [注意事項](#注意事項)
+  - [バージョン履歴](#バージョン履歴)
 
 
 ## 開発環境
 - M5Stack Core2 / CoreS3
-- Platformio
+- Platformio (VSCode)
 
 ## Function Callingで呼び出せる機能
 Function Callingで呼び出せる機能の一覧を下表に示します。
@@ -74,12 +93,25 @@ SDカードに次のようにCity IDを保存してください（例は神奈�
 City IDは[こちら](https://weather.tsukumijima.net/primary_area.xml)で調べることができます。
 
 #### ●アラーム音のMP3
-alarm.mp3という名前でSDカードに保存しておくと、タイマー機能のアラーム音として再生されます。
-（MP3ファイルがない場合は、ｽﾀｯｸﾁｬﾝが「時間になりました」と話します。）
+alarm.mp3という名前でSDカードに保存しておくと、タイマー機能のアラーム音として再生されます。MP3ファイルがない場合は、ｽﾀｯｸﾁｬﾝが「時間になりました」と話します。
 
-## ウェイクワード対応
-v0.2.0からウェイクワードにも対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。  
-※v0.5.0以降、カメラ＆顔検出のためにメモリを節約するため、ウェイクワードはplatformio.iniで以下のように無効化されています。ウェイクワードを有効化する場合、カメラ＆顔検出（-DENABLE_FACE_DETECT）は無効化することを推奨します。
+```
+note:  
+SDカードの相性により音が途切れることがあるため、起動時にMP3ファイルをSPIFFSにコピーして使用するように改善しました。すでにSPIFFSにalarm.mp3が存在する場合は起動時のコピーは行われません。
+```
+
+## その他追加した機能
+### ウェイクワード対応
+AIｽﾀｯｸﾁｬﾝ2同様、ウェイクワードに対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。  
+
+v0.6.0から、ウェイクワードを10個まで登録することが可能です。登録したウェイクワードのデータはSPIFFSにwakeword#.binという名前で保存されます。現行、10個に到達すると新たなウェイクワードは登録できませんので、FTPでSPIFFSにアクセスし不要なウェイクワードを削除してください（FTPはユーザ名：stackchan、パスワード：stackchan）。
+
+FFFTPでSPIFFSのファイル一覧を取得した様子
+
+![](images/ftp.jpg)
+
+
+※CoreS3ではカメラ＆顔検出のためにメモリを節約するため、ウェイクワードはplatformio.iniで以下のように無効化されています。ウェイクワードを有効化する場合、カメラ＆顔検出（-DENABLE_FACE_DETECT）は無効化することを推奨します。
 ```
 build_flags=
   -DBOARD_HAS_PSRAM
@@ -88,7 +120,9 @@ build_flags=
   ;-DENABLE_WAKEWORD
 ```
 
-## LEDパネルによる状態表示（CoreS3のみ）
+### LEDパネルによる状態表示（CoreS3のみ）
+![](images/hex_led.jpg)
+
 CoreS3の場合、ポートAにLEDパネル（NeoPixel互換LED搭載 HEXボード ）を接続すると、次の状態に応じて点灯します。
 
 - 起動完了（ドット絵の起動メッセージが流れる）
@@ -102,7 +136,9 @@ CoreS3の場合、ポートAにLEDパネル（NeoPixel互換LED搭載 HEXボー�
 ① tool/LED_Scroll_Pattern.xlsmでドット絵を編集してコードに変換する。  
 ② HexLED.cpp内の配列led_scroll_pattern01の値を①のコードに差し替える。
 
-## カメラによる顔検出（CoreS3のみ）
+### カメラによる顔検出（CoreS3のみ）
+![](images/face_detect.jpg)
+
 - 顔を検出すると音声認識を起動します。
   - LCD中央左側をタッチするとサイレントモードになり、顔検出しても起動しません。（代わりに、顔検出している間ｽﾀｯｸﾁｬﾝが笑顔になります。）
 - LCDの左上隅にカメラ画像が表示されます。画像部分をタッチすると表示ON/OFFできます。
@@ -133,5 +169,11 @@ CoreS3の場合、ポートAにLEDパネル（NeoPixel互換LED搭載 HEXボー�
   - タイマー機能のアラーム音としてSDカード内のMP3を再生するように改修。
 - v0.5.1
   - SDカードのMP3（アラーム用）をSPIFFSにコピーすることで、安定して再生できるように改善。
-- v0.5.2 (mainタグ)
+- v0.5.2
   - Core2 v1.1に対応
+- v0.6.0 (mainタグ)
+  - ウェイクワードを10個まで登録できるように機能拡張。
+  - FTPサーバ機能（SPIFFS）を追加。
+  - コードの一部をリファクタリング。
+
+
