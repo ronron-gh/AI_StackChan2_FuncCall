@@ -23,8 +23,8 @@ static String timer(int32_t time, const char* action);
 static String timer_change(int32_t time);
 
 String json_ChatString = 
-"{\"model\": \"gpt-3.5-turbo\","
-//"{\"model\": \"gpt-4\","
+//"{\"model\": \"gpt-3.5-turbo\","
+"{\"model\": \"gpt-4\","
 "\"messages\": [{\"role\": \"user\", \"content\": \"\"}],"
 "\"functions\": ["
   "{"
@@ -173,6 +173,20 @@ String json_ChatString =
     "}"
   "},"
   "{"
+    "\"name\": \"delete_wakeword\","
+    "\"description\": \"ウェイクワードを削除する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {"
+        "\"idx\":{"
+          "\"type\": \"integer\","
+          "\"description\": \"削除するウェイクワードの番号。\""
+        "}"
+      "},"
+      "\"required\": [\"idx\"]"
+    "}"
+  "},"
+  "{"
     "\"name\": \"get_weathers\","
     "\"description\": \"天気予報を取得。\","
     "\"parameters\":  {"
@@ -214,7 +228,7 @@ String timer(int32_t time, const char* action){
       xAlarmTimer = xTimerCreate("Timer", time * 1000, pdFALSE, 0, alarmTimerCallback);
       if(xAlarmTimer != NULL){
         xTimerStart(xAlarmTimer, 0);
-        response = String(time) + "秒後にalarmをセットしました。";
+        response = String("アラーム設定成功。") ;
       }
       else{
         response = "タイマーの設定が失敗しました。";
@@ -541,17 +555,31 @@ String read_mail(void) {
 
 bool register_wakeword_required = false;
 String register_wakeword(void){
-  String response = "ウェイクワード登録を開始します。";
+  String response = "ウェイクワードを登録します。合図の後にウェイクワードを発声してください。";
   register_wakeword_required = true;
   return response;
 }
 
 bool wakeword_enable_required = false;
 String wakeword_enable(void){
-  String response = "ウェイクワードを有効化します。";
+  String response = "ウェイクワードを有効化しました。";
   wakeword_enable_required = true;
   return response;
 }
+
+
+String delete_wakeword(int idx){
+  SPIFFS.begin(true);
+  String filename = filename_base + String(idx) + String(".bin");
+  if (SPIFFS.exists(filename.c_str()))
+  {
+    SPIFFS.remove(filename.c_str());
+    delete_mfcc(idx);
+  }
+  String response = String("ウェイクワード#") + String(idx) + String("を削除しました。");
+  return response;
+}
+
 
 // 今日の天気をWeb APIで取得する関数
 //   city IDはsetup()でSDカードのファイルから読み込む。
@@ -673,6 +701,11 @@ String exec_calledFunc(DynamicJsonDocument doc, String* calledFunc){
     }
     else if(strcmp(name, "wakeword_enable") == 0){
       response = wakeword_enable();    
+    }
+    else if(strcmp(name, "delete_wakeword") == 0){
+      const int idx = argsDoc["idx"];
+      Serial.printf("idx:%d\n",idx);   
+      response = delete_wakeword(idx);    
     }
     else if(strcmp(name, "get_weathers") == 0){
       response = get_weathers();    

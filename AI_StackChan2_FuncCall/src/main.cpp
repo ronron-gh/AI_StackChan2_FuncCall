@@ -92,6 +92,9 @@ void check_heap_largest_free_block(void);
 //static constexpr uint8_t m5spk_virtual_channel = 0;
 uint8_t m5spk_virtual_channel = 0;
 
+//bool servo_home = false;
+bool servo_home = true;
+
 using namespace m5avatar;
 Avatar avatar;
 const Expression expressions_table[] = {
@@ -160,6 +163,7 @@ bool playMP3File(const char *filename)
   #if defined(ENABLE_WAKEWORD)
       mode = 0;
   #endif
+      servo_home = false;
       mp3->begin(file_mp3, &out);
       result = true;
     }
@@ -227,8 +231,6 @@ void lipSync(void *args)
     delay(50);
   }
 }
-
-bool servo_home = false;
 
 void servo(void *args)
 {
@@ -945,7 +947,8 @@ void SST_ChatGPT() {
     ret = SpeechToText(false);
   }
 #ifdef USE_SERVO
-  servo_home = prev_servo_home;
+  //servo_home = prev_servo_home;
+  servo_home = false;
 #endif
   Serial.println("音声認識終了");
   Serial.println("音声認識結果");
@@ -970,6 +973,7 @@ void SST_ChatGPT() {
     delay(2000);
     avatar.setSpeechText("");
     avatar.setExpression(Expression::Neutral);
+    servo_home = true;
   } 
 }
 
@@ -1094,8 +1098,7 @@ void loop()
 #ifdef USE_SERVO
         if (box_servo.contain(t.x, t.y))
         {
-          servo_home = !servo_home;
-          //M5.Speaker.tone(1000, 100);
+          //servo_home = !servo_home;
           sw_tone();
         }
 #endif
@@ -1137,6 +1140,7 @@ void loop()
   }
 
   if(speech_text != ""){
+    servo_home = false;
     avatar.setExpression(Expression::Happy);
     speech_text_buffer = speech_text;
     speech_text = "";
@@ -1195,6 +1199,8 @@ void loop()
         avatar.set_isSubWindowEnable(true);
       }
 #endif  //ENABLE_FACE_DETECT
+
+      servo_home = true;
     }
     delay(1);
 //  } else {
@@ -1212,27 +1218,23 @@ void loop()
       avatar.setSpeechText(text.c_str());
       delay(1000);
       avatar.setSpeechText("");
-      mode = 0;
-      wakeword_is_enable = false;
+      //mode = 0;
+      //wakeword_is_enable = false;
+      mode = 1;
+      wakeword_is_enable = true;
 #ifdef USE_SERVO
-      servo_home = false;
+      //servo_home = false;
 #endif
     }
   }
   else if (mode > 0 && wakeword_is_enable) {
     int idx = wakeword_compare();
     if( idx >= 0){
-        Serial.println("wakeword_compare OK!");
-        String text = String("ウェイクワード#") + String(idx);
-        avatar.setSpeechText(text.c_str());
-        sw_tone();
-        SST_ChatGPT();
-        //avatar.setExpression(Expression::Happy);
-        //avatar.setSpeechText("御用でしょうか？");
-        //delay(1000);
-        //avatar.setExpression(Expression::Neutral);
-        //avatar.setSpeechText("");
-        
+      Serial.println("wakeword_compare OK!");
+      String text = String("ウェイクワード#") + String(idx);
+      avatar.setSpeechText(text.c_str());
+      sw_tone();
+      SST_ChatGPT();
     }
   }
 #endif  //ENABLE_WAKEWORD

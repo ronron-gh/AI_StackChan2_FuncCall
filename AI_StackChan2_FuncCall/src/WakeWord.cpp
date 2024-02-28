@@ -8,8 +8,7 @@
 #include "simplevox.h"
 #include "WakeWord.h"
 
-#define base_path "/spiffs"
-#define filename_base "/wakeword"
+
 //const String file_name[REGISTER_MAX] = {"/wakeword0.bin","/wakeword1.bin","/wakeword2.bin","/wakeword3.bin","/wakeword4.bin",
 //                              "/wakeword5.bin","/wakeword6.bin","/wakeword7.bin","/wakeword8.bin","/wakeword9.bin"};
 constexpr int kSampleRate = 16000;
@@ -314,4 +313,10 @@ int wakeword_compare()
     //if(dist < DIST_THRESHOLD) ret = true;
   }    
   return ret;
+}
+
+void delete_mfcc(int idx)
+{
+  delete mfcc[idx];
+  mfcc[idx] = nullptr;
 }
