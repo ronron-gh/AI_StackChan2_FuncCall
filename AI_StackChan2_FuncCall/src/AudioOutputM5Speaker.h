@@ -1,3 +1,5 @@
+#ifndef _AUDIO_OUTPUT_M5_SPEAKER_H
+#define _AUDIO_OUTPUT_M5_SPEAKER_H
 #include <AudioOutput.h>
 
 /// set M5Speaker virtual channel (0-7)
@@ -151,3 +153,5 @@ public:
     return (index < FFT_SIZE / 2) ? (uint32_t)sqrtf(_fr[ index ] * _fr[ index ] + _fi[ index ] * _fi[ index ]) : 0u;
   }
 };
+
+#endif

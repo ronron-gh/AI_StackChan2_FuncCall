@@ -6,13 +6,8 @@
 #include <nvs.h>
 #include <Avatar.h>
 
-#include <AudioOutput.h>
-#include <AudioFileSourceBuffer.h>
-#include <AudioGeneratorMP3.h>
-#include "AudioFileSourceHTTPSStream.h"
-//#include "AudioFileSourceSD.h"
-#include "AudioFileSourceSPIFFS.h"
-#include "AudioOutputM5Speaker.h"
+#include "PlayMP3.h"
+
 #include <ServoEasing.hpp> // https://github.com/ArminJo/ServoEasing       
 #include "WebVoiceVoxTTS.h"
 
@@ -32,6 +27,7 @@
 #include "Whisper.h"
 #include "Audio.h"
 #include "CloudSpeechClient.h"
+#include "Speech.h"
 #if defined(ENABLE_WAKEWORD)
 #include "WakeWord.h"
 #include "WakeWordIndex.h"
@@ -50,6 +46,9 @@
 #if defined( ENABLE_FACE_DETECT )
 #include <Camera.h>
 #endif    //ENABLE_FACE_DETECT
+
+#include "Scheduler.h"
+#include "MySchedule.h"
 
 
 #define USE_SDCARD
@@ -88,10 +87,6 @@ const int   DAYLIGHT_OFFSET = 0;                    // サマータイム設定�
 void check_heap_free_size(void);
 void check_heap_largest_free_block(void);
 
-/// set M5Speaker virtual channel (0-7)
-//static constexpr uint8_t m5spk_virtual_channel = 0;
-uint8_t m5spk_virtual_channel = 0;
-
 //bool servo_home = false;
 bool servo_home = true;
 
@@ -105,7 +100,6 @@ const Expression expressions_table[] = {
   Expression::Sad,
   Expression::Angry
 };
-
 String avatarText;
 
 
@@ -124,55 +118,10 @@ bool wakeword_is_enable = false;
 #endif
 //---------------------------------------------
 
-String speech_text = "";
-String speech_text_buffer = "";
+//String speech_text = "";
+//String speech_text_buffer = "";
 
 
-AudioOutputM5Speaker out(&M5.Speaker, m5spk_virtual_channel);
-AudioGeneratorMP3 *mp3;
-AudioFileSourceBuffer *buff = nullptr;
-int preallocateBufferSize = 30*1024;
-uint8_t *preallocateBuffer;
-AudioFileSourceHTTPSStream *file = nullptr;
-//AudioFileSourceSD *file_mp3 = nullptr;
-AudioFileSourceSPIFFS *file_mp3 = nullptr;
-
-void playMP3(AudioFileSourceBuffer *buff){
-  mp3->begin(buff, &out);
-}
-
-bool playMP3File(const char *filename)
-{
-  bool result;
-
-  if (SPIFFS.exists(filename)) {
-
-    file_mp3 = new AudioFileSourceSPIFFS(filename);
-    Serial.println("Open mp3");
-    
-    if( !file_mp3->isOpen() ){
-      delete file_mp3;
-      file_mp3 = nullptr;
-      Serial.println("failed to open mp3 file");
-      result = false;
-    }
-    else{
-      avatar.setExpression(Expression::Happy);
-      M5.Mic.end();
-      M5.Speaker.begin();
-  #if defined(ENABLE_WAKEWORD)
-      mode = 0;
-  #endif
-      servo_home = false;
-      mp3->begin(file_mp3, &out);
-      result = true;
-    }
-  }else{
-    Serial.println("failed to open mp3 file");
-    result = false;
-  }
-  return result;
-}
 
 
 // Called when a metadata event occurs (i.e. an ID3 tag, an ICY block, etc.
@@ -219,6 +168,7 @@ void lipSync(void *args)
   for (;;)
   {
     level = abs(*out.getBuffer());
+    //level = abs(*(out->getBuffer()));
     if(level<100) level = 0;
     if(level > 15000)
     {
@@ -430,8 +380,6 @@ bool copySDFileToSPIFFS(const char *path, bool forced) {
     return false;
   }
 
-  //File fsrc = SD.open("/alarm.mp3", FILE_READ);
-  //File fdst = SPIFFS.open("/alarm.mp3", FILE_WRITE);
   File fsrc = SD.open(path, FILE_READ);
   File fdst = SPIFFS.open(path, FILE_WRITE);
   if(!fsrc || !fdst) {
@@ -481,6 +429,7 @@ bool copySDFileToSPIFFS(const char *path, bool forced) {
   return true;
 }
 
+
 void setup()
 {
   auto cfg = M5.config();
@@ -491,14 +440,10 @@ void setup()
 //  cfg.output_power = true;
   M5.begin(cfg);
 
-  chat_doc = SpiRamJsonDocument(1024*30);
+  //auto brightness = M5.Display.getBrightness();
+  //Serial.printf("Brightness: %d\n", brightness);
 
-  //TTS MP3用バッファ （PSRAMから確保される）
-  preallocateBuffer = (uint8_t *)malloc(preallocateBufferSize);
-  if (!preallocateBuffer) {
-    M5.Display.printf("FATAL ERROR:  Unable to preallocate %d bytes for app\n", preallocateBufferSize);
-    for (;;) { delay(1000); }
-  }
+  chat_doc = SpiRamJsonDocument(1024*30);
 
   {
     auto micConfig = M5.Mic.config();
@@ -695,10 +640,9 @@ void setup()
       note = String(buf);
       Serial.printf("Notepad size: %d\n", sz);
 
-      if(sz >= 1){
-        speech_text = "メモが保存されています。";
-        //chatHistory.push_back(String("assistant"), String(""), speech_text);
-      }
+      //if(sz >= 1){
+      //  speech("メモが保存されています。");
+      //}
     }
     else {
       Serial.println("Failed to SD.open().");    
@@ -815,8 +759,7 @@ void setup()
   delay(3000);
 
   audioLogger = &Serial;
-  mp3 = new AudioGeneratorMP3();
-//  mp3->RegisterStatusCB(StatusCallback, (void*)"mp3");
+  mp3_init();
 
 #if defined(ENABLE_WAKEWORD)
   wakeword_init();
@@ -847,7 +790,6 @@ void setup()
   
   //メール受信設定
   imap_init();
-  startReadMailTimer();
 
 #if defined( ENABLE_HEX_LED )
   hex_led_init();
@@ -860,12 +802,14 @@ void setup()
   avatar.set_isSubWindowEnable(true);
 #endif
 
+  init_schedule();
 
   //ヒープメモリ残量確認(デバッグ用)
   check_heap_free_size();
   check_heap_largest_free_block();
 
 }
+
 
 String random_words[18] = {"あなたは誰","楽しい","怒った","可愛い","悲しい","眠い","ジョークを言って","泣きたい","怒ったぞ","こんにちは","お疲れ様","詩を書いて","疲れた","お腹空いた","嫌いだ","苦しい","俳句を作って","歌をうたって"};
 int random_time = -1;
@@ -886,7 +830,7 @@ void report_batt_level(){
 #if defined(ENABLE_WAKEWORD)
   mode = 0; 
 #endif
-  speech_text = String(buff);
+  speech(String(buff));
   delay(1000);
   avatar.setExpression(Expression::Neutral);
 }
@@ -909,7 +853,7 @@ void switch_monologue_mode(){
 #if defined(ENABLE_WAKEWORD)
     mode = 0;
 #endif
-    speech_text = tmp;
+    speech(tmp);
     delay(1000);
     avatar.setExpression(Expression::Neutral);
 }
@@ -954,15 +898,15 @@ void SST_ChatGPT() {
   Serial.println("音声認識結果");
   if(ret != "") {
     Serial.println(ret);
-    if (!mp3->isRunning() && speech_text=="" && speech_text_buffer == "") {
+
 #if defined( ENABLE_HEX_LED )
-      hex_led_ptn_accept();
+    hex_led_ptn_accept();
 #endif
-      exec_chatGPT(ret);
+    exec_chatGPT(ret);
 #if defined(ENABLE_WAKEWORD)
-      mode = 0;
+    mode = 0;
 #endif
-    }
+
   } else {
 #if defined( ENABLE_HEX_LED )
     hex_led_ptn_off();
@@ -986,171 +930,154 @@ void loop()
   {
     lastms1 = millis();
     random_time = 40000 + 1000 * random(30);
-    if (!mp3->isRunning() && speech_text=="" && speech_text_buffer == "") {
-      exec_chatGPT(random_words[random(18)]);
+
+    exec_chatGPT(random_words[random(18)]);
 #if defined(ENABLE_WAKEWORD)
-      mode = 0;
+    mode = 0;
 #endif
-    }
+    
   }
 
   
 #if defined(ENABLE_FACE_DETECT)
-  //しゃべっていないときに顔検出を実行し、顔が検出されれば音声認識を開始。
-  if (!mp3->isRunning() && speech_text=="" && speech_text_buffer == "") {
-    bool isFaceDetected;
-    isFaceDetected = camera_capture_and_face_detect();
-    if(!isSilentMode){
-      if(isFaceDetected){
-        avatar.set_isSubWindowEnable(false);
-        sw_tone();
-        SST_ChatGPT();                              //音声認識
-        //exec_chatGPT(random_words[random(18)]);   //独り言
+  //顔が検出されれば音声認識を開始。
+  bool isFaceDetected;
+  isFaceDetected = camera_capture_and_face_detect();
+  if(!isSilentMode){
+    if(isFaceDetected){
+      avatar.set_isSubWindowEnable(false);
+      sw_tone();
+      SST_ChatGPT();                              //音声認識
+      //exec_chatGPT(random_words[random(18)]);   //独り言
 
-        // フレームバッファを読み捨てる（ｽﾀｯｸﾁｬﾝが応答した後に、過去のフレームで顔検出してしまうのを防ぐため）
-        M5.In_I2C.release();
-        camera_fb_t *fb = esp_camera_fb_get();
-        esp_camera_fb_return(fb);
-      }
+      // フレームバッファを読み捨てる（ｽﾀｯｸﾁｬﾝが応答した後に、過去のフレームで顔検出してしまうのを防ぐため）
+      M5.In_I2C.release();
+      camera_fb_t *fb = esp_camera_fb_get();
+      esp_camera_fb_return(fb);
+    }
+  }
+  else{
+    if(isFaceDetected){
+      avatar.setExpression(Expression::Happy);
+      //delay(2000);
+      //avatar.setExpression(Expression::Neutral);
     }
     else{
-      if(isFaceDetected){
-        avatar.setExpression(Expression::Happy);
-        //delay(2000);
-        //avatar.setExpression(Expression::Neutral);
-      }
-      else{
-        avatar.setExpression(Expression::Neutral);
-      }
+      avatar.setExpression(Expression::Neutral);
     }
-
   }
+
 #endif
 
-  if(speech_text=="" && speech_text_buffer == ""){
-    M5.update();
+  M5.update();
 
 #if defined(ENABLE_WAKEWORD)
-    if (M5.BtnA.wasPressed() || wakeword_enable_required)
-    {
-      wakeword_enable_required = false;
+  if (M5.BtnA.wasPressed() || wakeword_enable_required)
+  {
+    wakeword_enable_required = false;
 
-      if(mode >= 0){
-        sw_tone();
-        if(mode == 0){
-          avatar.setSpeechText("ウェイクワード有効");
-          mode = 1;
-          wakeword_is_enable = true;
-        } else {
-          avatar.setSpeechText("ウェイクワード無効");
-          mode = 0;
-          wakeword_is_enable = false;
-        }
-        delay(1000);
-        avatar.setSpeechText("");
+    if(mode >= 0){
+      sw_tone();
+      if(mode == 0){
+        avatar.setSpeechText("ウェイクワード有効");
+        mode = 1;
+        wakeword_is_enable = true;
+      } else {
+        avatar.setSpeechText("ウェイクワード無効");
+        mode = 0;
+        wakeword_is_enable = false;
       }
-    }
-
-    if (M5.BtnB.pressedFor(2000) || register_wakeword_required) {
-      register_wakeword_required = false;
-
-      M5.Mic.end();
-      M5.Speaker.tone(1000, 100);
-      delay(500);
-      M5.Speaker.tone(600, 100);
       delay(1000);
-      M5.Speaker.end();
-      M5.Mic.begin();
-      random_time = -1;           //独り言停止
-      random_speak = true;
-      wakeword_is_enable = false; //wakeword 無効
-      mode = -1;
-  #ifdef USE_SERVO
-        servo_home = true;
-        delay(500);
-  #endif
-      avatar.setSpeechText("ウェイクワード登録開始");
+      avatar.setSpeechText("");
     }
+  }
+
+  if (M5.BtnB.pressedFor(2000) || register_wakeword_required) {
+    register_wakeword_required = false;
+
+    M5.Mic.end();
+    M5.Speaker.tone(1000, 100);
+    delay(500);
+    M5.Speaker.tone(600, 100);
+    delay(1000);
+    M5.Speaker.end();
+    M5.Mic.begin();
+    random_time = -1;           //独り言停止
+    random_speak = true;
+    wakeword_is_enable = false; //wakeword 無効
+    mode = -1;
+#ifdef USE_SERVO
+      servo_home = true;
+      delay(500);
+#endif
+    avatar.setSpeechText("ウェイクワード登録開始");
+  }
 #endif  //ENABLE_WAKEWORD
 
-    if (M5.BtnC.wasPressed())
-    {
-      sw_tone();
-      report_batt_level();
-    }
+  if (M5.BtnC.wasPressed())
+  {
+    sw_tone();
+    report_batt_level();
+  }
 
 
 #if defined(ARDUINO_M5STACK_Core2) || defined( ARDUINO_M5STACK_CORES3 )
-    auto count = M5.Touch.getCount();
-    if (count)
-    {
-      auto t = M5.Touch.getDetail();
-      if (t.wasPressed())
-      {          
-        if (box_stt.contain(t.x, t.y)&&(!mp3->isRunning()))
-        {
+  auto count = M5.Touch.getCount();
+  if (count)
+  {
+    auto t = M5.Touch.getDetail();
+    if (t.wasPressed())
+    {          
+      if (box_stt.contain(t.x, t.y)&&(!mp3->isRunning()))
+      {
 #if defined(ENABLE_FACE_DETECT)
-          avatar.set_isSubWindowEnable(false);
+        avatar.set_isSubWindowEnable(false);
 #endif
-          sw_tone();
-          SST_ChatGPT();
-        }
-#ifdef USE_SERVO
-        if (box_servo.contain(t.x, t.y))
-        {
-          //servo_home = !servo_home;
-          sw_tone();
-        }
-#endif
-        if (box_BtnA.contain(t.x, t.y))
-        {
-#if defined(ENABLE_FACE_DETECT)
-          isSilentMode = !isSilentMode;
-          if(isSilentMode){
-            avatar.setSpeechText("サイレントモード");
-          }
-          else{
-            avatar.setSpeechText("サイレントモード解除");
-          }
-          delay(2000);
-          avatar.setSpeechText("");
-#else
-          sw_tone();
-          switch_monologue_mode();
-#endif
-        }
-        if (box_BtnC.contain(t.x, t.y))
-        {
-#if defined(ENABLE_FACE_DETECT)
-          avatar.set_isSubWindowEnable(false);
-#endif
-          sw_tone();
-          report_batt_level();
-        }
-#if defined(ENABLE_FACE_DETECT)
-        if (box_subWindow.contain(t.x, t.y))
-        {
-          isSubWindowON = !isSubWindowON;
-          avatar.set_isSubWindowEnable(isSubWindowON);
-        }
-#endif //ENABLE_FACE_DETECT
+        sw_tone();
+        SST_ChatGPT();
       }
+#ifdef USE_SERVO
+      if (box_servo.contain(t.x, t.y))
+      {
+        //servo_home = !servo_home;
+        sw_tone();
+      }
+#endif
+      if (box_BtnA.contain(t.x, t.y))
+      {
+#if defined(ENABLE_FACE_DETECT)
+        isSilentMode = !isSilentMode;
+        if(isSilentMode){
+          avatar.setSpeechText("サイレントモード");
+        }
+        else{
+          avatar.setSpeechText("サイレントモード解除");
+        }
+        delay(2000);
+        avatar.setSpeechText("");
+#else
+        sw_tone();
+        switch_monologue_mode();
+#endif
+      }
+      if (box_BtnC.contain(t.x, t.y))
+      {
+#if defined(ENABLE_FACE_DETECT)
+        avatar.set_isSubWindowEnable(false);
+#endif
+        sw_tone();
+        report_batt_level();
+      }
+#if defined(ENABLE_FACE_DETECT)
+      if (box_subWindow.contain(t.x, t.y))
+      {
+        isSubWindowON = !isSubWindowON;
+        avatar.set_isSubWindowEnable(isSubWindowON);
+      }
+#endif //ENABLE_FACE_DETECT
     }
-#endif
   }
-
-  if(speech_text != ""){
-    servo_home = false;
-    avatar.setExpression(Expression::Happy);
-    speech_text_buffer = speech_text;
-    speech_text = "";
-    M5.Mic.end();
-    M5.Speaker.begin();
-#if defined(ENABLE_WAKEWORD)
-    mode = 0;
 #endif
-    Voicevox_tts((char*)speech_text_buffer.c_str(), (char*)TTS_PARMS.c_str());
-  }
 
 
   if (alarmTimerCallbacked  && !mp3->isRunning()) {
@@ -1163,49 +1090,11 @@ void loop()
       Serial.println("Failed to mount SPIFFS.");
     }
     else{
-      if(!playMP3File("/alarm.mp3")){
-        //mp3がない場合はｽﾀｯｸﾁｬﾝがしゃべる
-        speech_text = "時間になりました。";
-      }
+      playMP3File("/alarm.mp3");
+      speech("時間になりました。");
     }
   }
 
-  //if (mp3->isRunning()) {
-  while(mp3->isRunning()) {
-    if (!mp3->loop()) {
-      mp3->stop();
-      if(file != nullptr){delete file; file = nullptr;}
-      if(buff != nullptr){delete buff; buff = nullptr;}
-      Serial.println("mp3 stop");
-      avatar.setExpression(Expression::Neutral);
-      speech_text_buffer = "";
-      delay(200);
-      M5.Speaker.end();
-      M5.Mic.begin();
-
-      //SDカードのmp3ファイルを再生している場合
-      if(file_mp3 != nullptr){
-        delete file_mp3;
-        file_mp3 = nullptr;
-      }
-
-#if defined(ENABLE_WAKEWORD)
-      if(wakeword_is_enable) mode = 1;
-      else  mode = 0;
-#endif
-
-#if defined(ENABLE_FACE_DETECT)
-      if(isSubWindowON){
-        avatar.set_isSubWindowEnable(true);
-      }
-#endif  //ENABLE_FACE_DETECT
-
-      servo_home = true;
-    }
-    delay(1);
-//  } else {
-//    web_server_handle_client();
-  }
   web_server_handle_client();
   ftpSrv.handleFTP();
   
@@ -1239,30 +1128,6 @@ void loop()
   }
 #endif  //ENABLE_WAKEWORD
 
-  if(readMailTimerCallbacked && !mp3->isRunning()){
-    avatar.setSpeechText("受信メール確認中");
-    Serial.println("loop task: imapReadMail()");
-    imapReadMail();
-    readMailTimerCallbacked = false;
-    avatar.setSpeechText("");
-
-    int nMail = recvMessages.size();
-    if(nMail > prev_nMail){
-      if(speech_text=="" && speech_text_buffer == "") {
-        prev_nMail = nMail;
-
-        if(!playMP3File("/mail.mp3")){
-          //mp3がない場合はｽﾀｯｸﾁｬﾝがしゃべる
-          speech_text = String(nMail) + "件のメールを受信しています。";
-        }
-      }
-    }
-
-    //ヒープメモリ残量確認(デバッグ用)
-    //check_heap_free_size();
-    //check_heap_largest_free_block();
-  }
-
   if(xAlarmTimer != NULL){
     TickType_t xRemainingTime;
 
@@ -1281,7 +1146,10 @@ void loop()
   }
 #endif
 
+  run_schedule();
+
 }
+
 
 void check_heap_free_size(void){
   Serial.printf("===============================================================\n");
@@ -1305,4 +1173,3 @@ void check_heap_largest_free_block(void){
   Serial.printf("heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT)  : %6d\n", heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) );
 
 }
- 

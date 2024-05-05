@@ -6,7 +6,6 @@ String toMailAdr = "";    // "XXXXXXXX@XXX.com"
 IMAPSession imap;
 
 TimerHandle_t xTimerReadMail;
-bool readMailTimerCallbacked = false;
 std::deque<String> recvMessages;
 int prev_nMail = 0;
 
@@ -424,28 +423,5 @@ void imapReadMail(void){
 
   /* Clear all stored data in IMAPSession object */
   imap.empty();
-
-}
-
-void readMailTimerCallback(TimerHandle_t _xTimer){
-
-  Serial.println("IMAP Read Timer Callback");
-
-  //imapReadMail();     //割り込みルーチンから呼ぶとリセットがかかるので、loopタスクに移動した
-  readMailTimerCallbacked = true;
-
-  startReadMailTimer();
-}
-
-void startReadMailTimer(void){
-  xTimerReadMail = xTimerCreate("Timer Read Mail", READ_MAIL_PERIOD, pdFALSE, 0, readMailTimerCallback);
-  
-  if(xTimerReadMail != NULL){
-    xTimerStart(xTimerReadMail, 0);
-    Serial.println("Start read mail timer.");
-  }
-  else{
-    Serial.println("Failed to start read mail timer.");
-  }
 
 }

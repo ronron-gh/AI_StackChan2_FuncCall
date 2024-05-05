@@ -2,28 +2,14 @@
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
 #include "WebVoiceVoxRootCA.h"
-#include <AudioGeneratorMP3.h>
-#include <AudioFileSourceBuffer.h>
-#include "AudioFileSourceHTTPSStream.h"
-//#include "AudioOutputM5Speaker.h"
 #include "SpiRamJsonDocument.h"
+#include "PlayMP3.h"
 
 String VOICEVOX_API_KEY = "";
 String TTS_SPEAKER_NO = "3";
 String TTS_SPEAKER = "&speaker=";
 String TTS_PARMS = TTS_SPEAKER + TTS_SPEAKER_NO;
 
-//-----------------------------------------------------
-extern String VOICEVOX_API_KEY;
-extern AudioGeneratorMP3 *mp3;
-extern AudioFileSourceBuffer *buff;
-extern AudioFileSourceHTTPSStream *file;
-extern int preallocateBufferSize;
-extern uint8_t *preallocateBuffer;
-//extern AudioOutputM5Speaker out;
-void StatusCallback(void *cbData, int code, const char *string);
-void playMP3(AudioFileSourceBuffer *buff);
-//-----------------------------------------------------
 
 String https_get(const char* url, const char* root_ca) {
   String payload = "";

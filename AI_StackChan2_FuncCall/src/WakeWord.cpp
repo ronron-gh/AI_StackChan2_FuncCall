@@ -174,6 +174,7 @@ void wakeword_init(){
     while(true) delay(10);
   }
   
+  M5.Display.printf("Wake word files:\n");
   SPIFFS.begin(true);
   for(int i=0; i<REGISTER_MAX; i++){
     String filename = filename_base + String(i) + String(".bin");
@@ -182,8 +183,7 @@ void wakeword_init(){
     {
       //String path = base_path + file_name[i];
       String path = base_path + filename;
-      M5.Display.printf("File exists !! %s\n", path.c_str());
-      Serial.printf("File exists !! %s\n", path.c_str());
+      M5.Display.printf(" %s\n", path.c_str());
 
       mfcc[i] = mfccEngine.loadFile(path.c_str());
       //mode = 1;

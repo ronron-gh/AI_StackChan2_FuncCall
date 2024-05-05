@@ -5,7 +5,7 @@
 
 #define NUM_LEDS 37
 //#define LED_DATA_PIN 9    //PORTB
-#define LED_DATA_PIN 2    //PORTA
+#define LED_DATA_PIN 2    //CoreS3 PORTA
 #define LED_BRIGHTNESS 8
 
 void hex_led_init(void);

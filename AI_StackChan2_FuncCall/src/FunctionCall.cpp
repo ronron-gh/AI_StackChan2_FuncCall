@@ -8,6 +8,8 @@
 #include "MailClient.h"
 #include "HexLED.h"
 #include "WakeWord.h"
+#include "Speech.h"
+#include "Scheduler.h"
 using namespace m5avatar;
 
 extern Avatar avatar;
@@ -85,11 +87,38 @@ String json_ChatString =
     "}"
   "},"
   "{"
-    "\"name\": \"listen\","
-    "\"description\": \"相手がこれから話すことを聞き取る。例えば、「これから言うことをメモして」と言われたときにこの関数を使用する。\","
+    "\"name\": \"reminder\","
+    "\"description\": \"指定した時間にリマインドする。内容は事前に聞き取ってください\","
     "\"parameters\": {"
       "\"type\":\"object\","
-      "\"properties\": {}"
+      "\"properties\": {"
+        "\"hour\":{"
+          "\"type\": \"integer\","
+          "\"description\": \"hour (0-23)\""
+        "},"
+        "\"min\":{"
+          "\"type\": \"integer\","
+          "\"description\": \"minute\""
+        "},"
+        "\"text\":{"
+          "\"type\": \"string\","
+          "\"description\": \"リマインドする内容\""
+        "}"
+      "},"
+      "\"required\": [\"hour\",\"min\",\"text\"]"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"ask\","
+    "\"description\": \"足りない情報がある場合に、相手に質問する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {"
+        "\"text\":{"
+          "\"type\": \"string\","
+          "\"description\": \"質問の内容。\""
+        "}"
+      "}"
     "}"
   "},"
   "{"
@@ -102,7 +131,8 @@ String json_ChatString =
           "\"type\": \"string\","
           "\"description\": \"メモの内容。\""
         "}"
-      "}"
+      "},"
+      "\"required\": [\"text\"]"
     "}"
   "},"
   "{"
@@ -309,23 +339,42 @@ String get_week(){
   return response;
 }
 
+String reminder(int hour, int min, const char* text){
+  String response = "";
+  int ret;
+  
+  Serial.println("reminder");
+  Serial.printf("%d:%d\n", hour, min);
+  Serial.println(text);
+
+  add_schedule(new ScheduleReminder(hour, min, String(text)));
+  
+  //response = String("Reminder setting successful");
+  response = String(String("リマインドの設定成功。")
+                    + String(hour) + ":" + String(min) + " "
+                    + String(text));
+
+  return response;
+}
+
 extern bool servo_home;
 extern String OPENAI_API_KEY;
 extern String STT_API_KEY;
 extern String SpeechToText(bool isGoogle);
 extern void sw_tone();
 
-String listen(){
-  sw_tone();
+
+String ask(const char* text){
+
   bool prev_servo_home = servo_home;
 //#ifdef USE_SERVO
   servo_home = true;
 //#endif
   avatar.setExpression(Expression::Happy);
+  speech(String(text));
+  sw_tone();
   avatar.setSpeechText("どうぞ話してください");
-  //M5.Speaker.end();
   String ret;
-
   if(OPENAI_API_KEY != STT_API_KEY){
     Serial.println("Google STT");
     ret = SpeechToText(true);
@@ -356,6 +405,7 @@ String listen(){
   return ret;
 }
 
+
 String note = "";
 String save_note(const char* text){
   String response = "";
@@ -374,16 +424,17 @@ String save_note(const char* text){
       fs.write((uint8_t*)note.c_str(), note.length());
       fs.close();
       SD.end();
-      response = "メモを保存しました。";
+      //response = "Note saved successfully";
+      response = String("メモの保存成功。メモの内容：" + String(text));
     }
     else{
-      response = "メモを保存できませんでした。";
+      response = "メモの保存に失敗しました";
       SD.end();
     }
 
   }
   else{
-    response = "メモを保存できませんでした。";
+    response = "メモの保存に失敗しました";
   }
   return response;
 }
@@ -410,15 +461,15 @@ String delete_note(){
       fs.write((uint8_t*)note.c_str(), note.length());
       fs.close();
       SD.end();
-      response = "メモを消去しました。";
+      response = "メモを消去しました";
     }
     else{
-      response = "メモを消去できませんでした。";
+      response = "メモの消去に失敗しました";
       SD.end();
     }
   }
   else{
-    response = "メモを消去できませんでした。";
+    response = "メモの消去に失敗しました";
   }
   return response;
 }
@@ -669,8 +720,19 @@ String exec_calledFunc(DynamicJsonDocument doc, String* calledFunc){
     else if(strcmp(name, "get_week") == 0){
       response = get_week();    
     }
-    else if(strcmp(name, "listen") == 0){
-      response = listen();    
+    else if(strcmp(name, "reminder") == 0){
+      const int hour = argsDoc["hour"];
+      const int min = argsDoc["min"];
+      const char* text = argsDoc["text"];
+      response = reminder(hour, min, text);
+    }
+    //else if(strcmp(name, "listen") == 0){
+    //  response = listen();    
+    //}
+    else if(strcmp(name, "ask") == 0){
+      const char* text = argsDoc["text"];
+      Serial.println(text);
+      response = ask(text);
     }
     else if(strcmp(name, "save_note") == 0){
       const char* text = argsDoc["text"];

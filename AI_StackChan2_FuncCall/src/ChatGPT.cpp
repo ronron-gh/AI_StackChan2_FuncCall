@@ -10,6 +10,7 @@
 #include "ChatHistory.h"
 #include "FunctionCall.h"
 #include "HexLED.h"
+#include "Speech.h"
 
 using namespace m5avatar;
 extern Avatar avatar;
@@ -220,7 +221,6 @@ void exec_chatGPT(String text) {
     Serial.println(json_string);
     Serial.println("====================");
 
-
     response = chatGpt(json_string, &calledFunc);
 
     // 返答をチャット履歴に追加
@@ -232,17 +232,9 @@ void exec_chatGPT(String text) {
     }
 
     if(calledFunc == ""){
-      if(speech_text=="" && speech_text_buffer == "") {
-        speech_text = response;
-        Serial.println("Chat End");
-      } else {
-        //response = "busy";
-        Serial.println("Chat End (TTS busy)");
-      }
-
+      speech(response);
       //チャット履歴の容量を圧迫しないように、functionロールを削除する
       chatHistory.clean_function_role();
-
       break;
     }
   }
