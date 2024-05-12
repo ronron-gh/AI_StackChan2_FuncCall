@@ -25,8 +25,8 @@ static String timer(int32_t time, const char* action);
 static String timer_change(int32_t time);
 
 String json_ChatString = 
-//"{\"model\": \"gpt-3.5-turbo\","
-"{\"model\": \"gpt-4\","
+"{\"model\": \"gpt-3.5-turbo-0125\","
+//"{\"model\": \"gpt-4\","
 "\"messages\": [{\"role\": \"user\", \"content\": \"\"}],"
 "\"functions\": ["
   "{"
@@ -214,6 +214,14 @@ String json_ChatString =
         "}"
       "},"
       "\"required\": [\"idx\"]"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"get_news\","
+    "\"description\": \"最新のニュースを取得して読み上げる。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {}"
     "}"
   "},"
   "{"
@@ -631,6 +639,62 @@ String delete_wakeword(int idx){
   return response;
 }
 
+// 最新のニュースをWeb APIで取得する関数
+//   API keyはsetup()でSDカードのファイルから読み込む。
+String newsApiUrl = "https://newsapi.org/v2/top-headlines?country=jp&apiKey=";
+String newsApiKey = "";
+String get_news(){
+  String response = "";
+  DynamicJsonDocument doc(2048*10);//ここの数値が小さいと上手く取得できませんでした。
+
+  if (WiFi.status() == WL_CONNECTED) {
+    HTTPClient http;
+
+    // ニュースAPIのURL
+    String url = newsApiUrl + newsApiKey;
+
+    // HTTPリクエストを送信します
+    http.begin(url); // URLをHTTPクライアントに渡す
+    int httpCode = http.GET(); // URLはbegin()で渡しているため、GET()メソッドには引数が必要ありません
+
+    // HTTPステータスコードを確認します
+    if (httpCode == HTTP_CODE_OK) {
+      // レスポンスデータを取得します
+      String payload = http.getString();
+
+      // JSONデータをパースして必要な情報を抽出します
+      DeserializationError error = deserializeJson(doc, payload);
+      if (!error) {
+        // ニュースの一覧が空でないことを確認します
+        if (doc.containsKey("articles") && doc["articles"].size() > 0) {
+          // ニュースの一覧から最初の5件のタイトルを取得します
+          for (int j = 0; j < 5; j++) {
+            String title = doc["articles"][j]["title"];
+            response += title + "\n"; // タイトルを改行してresponseに追加
+          }
+        } else {
+          response = "ニュースが見つかりませんでした。";
+        }
+      } else {
+        response = "JSONの解析に失敗しました。";
+        Serial.print("deserializeJson() failed: ");
+        Serial.println(error.c_str());
+      }
+    } else {
+      response = "HTTPリクエストが失敗しました。";
+      Serial.printf("HTTP error: %d\n", httpCode);
+    }
+
+  //  http.end(); // HTTPセッションを閉じます
+  } else {
+    response = "WiFiに接続されていません。";
+    Serial.println("WiFi is not connected.");
+  }
+
+  return response;
+}
+
+
 
 // 今日の天気をWeb APIで取得する関数
 //   city IDはsetup()でSDカードのファイルから読み込む。
@@ -726,9 +790,6 @@ String exec_calledFunc(DynamicJsonDocument doc, String* calledFunc){
       const char* text = argsDoc["text"];
       response = reminder(hour, min, text);
     }
-    //else if(strcmp(name, "listen") == 0){
-    //  response = listen();    
-    //}
     else if(strcmp(name, "ask") == 0){
       const char* text = argsDoc["text"];
       Serial.println(text);
@@ -768,6 +829,9 @@ String exec_calledFunc(DynamicJsonDocument doc, String* calledFunc){
       const int idx = argsDoc["idx"];
       Serial.printf("idx:%d\n",idx);   
       response = delete_wakeword(idx);    
+    }
+    else if(strcmp(name, "get_news") == 0){
+      response = get_news();    
     }
     else if(strcmp(name, "get_weathers") == 0){
       response = get_weathers();    

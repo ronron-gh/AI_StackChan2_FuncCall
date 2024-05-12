@@ -6,6 +6,7 @@
 
 extern String json_ChatString;
 extern String weatherCityID;
+extern String newsApiKey;
 extern String note;
 extern TimerHandle_t xAlarmTimer;
 

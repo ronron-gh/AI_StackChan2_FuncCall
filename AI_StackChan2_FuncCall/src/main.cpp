@@ -2,6 +2,7 @@
 //#include <FS.h>
 #include <SD.h>
 #include <SPIFFS.h>
+#include "SDUtil.h"
 #include <M5Unified.h>
 #include <nvs.h>
 #include <Avatar.h>
@@ -360,76 +361,6 @@ void time_sync(const char* ntpsrv, long gmt_offset, int daylight_offset) {
 }
 
 
-// SDカードのファイルをSPIFFSにコピー
-bool copySDFileToSPIFFS(const char *path, bool forced) {
-  
-  Serial.println("Copy SD File to SPIFFS.");
-
-  if(!SPIFFS.begin(true)){
-    Serial.println("Failed to mount SPIFFS.");
-    return false;
-  }
-
-  if (SPIFFS.exists(path) && !forced) {
-	  Serial.println("File already exists in SPIFFS.");
-	  return true;
-  }
-
-  if (!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
-    Serial.println("Failed to mount SD.");
-    return false;
-  }
-
-  File fsrc = SD.open(path, FILE_READ);
-  File fdst = SPIFFS.open(path, FILE_WRITE);
-  if(!fsrc || !fdst) {
-    Serial.println("Failed to open file.");
-    return false;
-  }
-
-  uint8_t *buf = new uint8_t[4096];
-  if (!buf) {
-	  Serial.println("Failed to allocate buffer.");
-	  return false;
-  }
-
-  size_t len, size, ret;
-  size = len = fsrc.size();
-  while (len) {
-	  size_t s = len;
-	  if (s > 4096){
-		  s = 4096;
-    }  
-
-	  fsrc.read(buf, s);
-	  if ((ret = fdst.write(buf, s)) < s) {
-		  Serial.printf("write failed: %d - %d\n", ret, s);
-		  return false;
-	  }
-	  len -= s;
-	  Serial.printf("%d / %d\n", size - len, size);
-  }
- 
-  delete[] buf;
-  fsrc.close();
-  fdst.close();
-
-  if (!SPIFFS.exists(path)) {
-	  Serial.println("no file in SPIFFS.");
-	  return false;
-  }
-  fdst = SPIFFS.open(path);
-  len = fdst.size();
-  fdst.close();
-  if (len != size) {
-	 Serial.println("size not match.");
-	 return false;
-  }
-  Serial.println("*** Done. ***\r\n");
-  return true;
-}
-
-
 void setup()
 {
   auto cfg = M5.config();
@@ -517,135 +448,88 @@ void setup()
   /// settings
   if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
     /// wifi
-    auto fs = SD.open("/wifi.txt", FILE_READ);
-    if(fs) {
-      size_t sz = fs.size();
-      char buf[sz + 1];
-      fs.read((uint8_t*)buf, sz);
-      buf[sz] = 0;
-      fs.close();
-
-      int y = 0;
-      for(int x = 0; x < sz; x++) {
-        if(buf[x] == 0x0a || buf[x] == 0x0d)
-          buf[x] = 0;
-        else if (!y && x > 0 && !buf[x - 1] && buf[x])
-          y = x;
+    {
+      char buf[128], ssid[128], key[128];
+      if(read_sd_file("/wifi.txt", buf, sizeof(buf))){
+        read_line_from_buf(buf, ssid);
+        Serial.printf("SSID: %s\n",ssid);
+        read_line_from_buf(nullptr, key);
+        Serial.printf("Key: %s\n",key);
+        WiFi.begin(ssid, key);
       }
-      WiFi.begin(buf, &buf[y]);
-    } else {
-       WiFi.begin();
+      else{
+        WiFi.begin();
+      }
     }
 
+    /// API key
     uint32_t nvs_handle;
     if (ESP_OK == nvs_open("apikey", NVS_READWRITE, &nvs_handle)) {
-      /// radiko-premium
-      fs = SD.open("/apikey.txt", FILE_READ);
-      if(fs) {
-        size_t sz = fs.size();
-        char buf[sz + 1];
-        fs.read((uint8_t*)buf, sz);
-        buf[sz] = 0;
-        fs.close();
-  
-        int y = 0;
-        int z = 0;
-        for(int x = 0; x < sz; x++) {
-          if(buf[x] == 0x0a || buf[x] == 0x0d)
-            buf[x] = 0;
-          else if (!y && x > 0 && !buf[x - 1] && buf[x])
-            y = x;
-          else if (!z && x > 0 && !buf[x - 1] && buf[x])
-            z = x;
-        }
+      char buf[256], key[256];
+      if(read_sd_file("/apikey.txt", buf, sizeof(buf))){
+        read_line_from_buf(buf, key);
+        nvs_set_str(nvs_handle, "openai", key);
+        Serial.printf("openai: %s\n",key);
 
-        nvs_set_str(nvs_handle, "openai", buf);
-        nvs_set_str(nvs_handle, "voicevox", &buf[y]);
-        nvs_set_str(nvs_handle, "sttapikey", &buf[z]);
-        Serial.println("------------------------");
-        Serial.println(buf);
-        Serial.println(&buf[y]);
-        Serial.println(&buf[z]);
-        Serial.println("------------------------");
+        read_line_from_buf(nullptr, key);
+        nvs_set_str(nvs_handle, "voicevox", key);
+        Serial.printf("voicevox: %s\n",key);
+
+        read_line_from_buf(nullptr, key);
+        nvs_set_str(nvs_handle, "sttapikey", key);
+        Serial.printf("stt: %s\n",key);
       }
-      
       nvs_close(nvs_handle);
     }
 
+    /// News API key
+    {
+      char buf[128], key[128];
+      if(read_sd_file("/news_api_key.txt", buf, sizeof(buf))){
+        read_line_from_buf(buf, key);
+        newsApiKey = String(key);
+      }
+      Serial.printf("NewsAPI key: %s\n", newsApiKey.c_str());
+    }
+
     /// Weather city ID
-    fs = SD.open("/weather_city_id.txt", FILE_READ);
-    if(fs) {
-      size_t sz = fs.size();
-      char buf[sz + 1];
-      fs.read((uint8_t*)buf, sz);
-      buf[sz] = 0;
-      fs.close();
-
-      for(int x = 0; x < sz; x++) {
-        if(buf[x] == 0x0a || buf[x] == 0x0d){
-          buf[x] = 0;
-        }
+    {
+      char buf[128], key[128];
+      if(read_sd_file("/weather_city_id.txt", buf, sizeof(buf))){
+        read_line_from_buf(buf, key);
+        weatherCityID = String(key);
       }
-      Serial.println(buf);
-      weatherCityID = String(buf);
-    } else {
-      weatherCityID = "130010";
-    }
-    Serial.println(weatherCityID);
-
-
-    // Gmailアカウント、アプリパスワード
-    fs = SD.open("/gmail.txt", FILE_READ);
-    if(fs) {
-      size_t sz = fs.size();
-      char buf[sz + 1];
-      fs.read((uint8_t*)buf, sz);
-      buf[sz] = 0;
-      fs.close();
-
-      int y = 0;
-      int z = 0;
-      for(int x = 0; x < sz; x++) {
-        if(buf[x] == 0x0a || buf[x] == 0x0d)
-          buf[x] = 0;
-        else if (!y && x > 0 && !buf[x - 1] && buf[x])
-          y = x;
-        else if (!z && x > 0 && !buf[x - 1] && buf[x])
-          z = x;
+      else{
+        weatherCityID = "130010";
       }
-
-      authMailAdr = String(buf);
-      authAppPass = String(&buf[y]);
-      toMailAdr = String(&buf[z]);
-
-      Serial.println("My mail addr: " + authMailAdr);
-      Serial.println("My mail pass: " + authAppPass);
-      Serial.println("To mail addr: " + toMailAdr);
-
-    }
-    else {
-      Serial.println("Failed to SD.open().");    
+      Serial.printf("Weather City ID: %s\n", weatherCityID);
     }
 
+    /// Gmail
+    {
+      char buf[256], key[256];
+      if(read_sd_file("/gmail.txt", buf, sizeof(buf))){
+        read_line_from_buf(buf, key);
+        authMailAdr = String(key);
+        Serial.println("My mail addr: " + authMailAdr);
+
+        read_line_from_buf(nullptr, key);
+        authAppPass = String(key);
+        Serial.println("My mail pass: " + authAppPass);
+
+        read_line_from_buf(nullptr, key);
+        toMailAdr = String(key);
+        Serial.println("To mail addr: " + toMailAdr);
+      }
+    }
 
     /// メモがあるか確認
-    fs = SD.open("/notepad.txt", FILE_READ);
-    if(fs) {
-      size_t sz = fs.size();
-      char buf[sz + 1];
-      fs.read((uint8_t*)buf, sz);
-      buf[sz] = 0;
-      fs.close();
-
-      note = String(buf);
-      Serial.printf("Notepad size: %d\n", sz);
-
-      //if(sz >= 1){
-      //  speech("メモが保存されています。");
-      //}
-    }
-    else {
-      Serial.println("Failed to SD.open().");    
+    {
+      char buf[512];
+      if(read_sd_file("/notepad.txt", buf, sizeof(buf))){
+        note = String(buf);
+        Serial.printf("Notepad: %s\n", buf);
+      }
     }
 
     //SD.end();
@@ -711,7 +595,7 @@ void setup()
     if(file){
       DeserializationError error = deserializeJson(chat_doc, file);
       if(error){
-        Serial.println("Failed to deserialize JSON");
+        Serial.println("Failed to deserialize JSON. Init doc by default.");
         init_chat_doc(json_ChatString.c_str());
       }
       else{
@@ -793,8 +677,8 @@ void setup()
 
 #if defined( ENABLE_HEX_LED )
   hex_led_init();
-  //hex_led_ptn_off();
-  hex_led_ptn_boot();
+  hex_led_ptn_off();
+  //hex_led_ptn_boot();
 #endif 
 
 #if defined(ENABLE_FACE_DETECT)
