@@ -50,7 +50,7 @@
 
 #include "Scheduler.h"
 #include "MySchedule.h"
-
+#include "WatchDog.h"
 
 #define USE_SDCARD
 #define WIFI_SSID "SET YOUR WIFI SSID"
@@ -687,6 +687,7 @@ void setup()
 #endif
 
   init_schedule();
+  //init_watchdog();
 
   //ヒープメモリ残量確認(デバッグ用)
   check_heap_free_size();
@@ -787,6 +788,9 @@ void SST_ChatGPT() {
     hex_led_ptn_accept();
 #endif
     exec_chatGPT(ret);
+    avatar.setSpeechText("");
+    avatar.setExpression(Expression::Neutral);
+    servo_home = true;
 #if defined(ENABLE_WAKEWORD)
     mode = 0;
 #endif
@@ -1031,7 +1035,8 @@ void loop()
 #endif
 
   run_schedule();
-
+  //reset_watchdog();
+  
 }
 
 
