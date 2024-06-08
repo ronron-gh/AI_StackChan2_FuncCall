@@ -51,6 +51,7 @@
 #include "Scheduler.h"
 #include "MySchedule.h"
 #include "WatchDog.h"
+#include "SDUpdater.h"
 
 #define USE_SDCARD
 #define WIFI_SSID "SET YOUR WIFI SSID"
@@ -61,6 +62,9 @@
 
 #define USE_SERVO
 #ifdef USE_SERVO
+#if defined(ENABLE_SD_UPDATER)
+  // SERVO_PINはservo.txtから読み込む
+#else
 #if defined(ARDUINO_M5STACK_Core2)
   // #define SERVO_PIN_X 13  //Core2 PORT C
   // #define SERVO_PIN_Y 14
@@ -76,7 +80,8 @@
   #define SERVO_PIN_X 18  //CoreS3 PORT C
   #define SERVO_PIN_Y 17
 #endif
-#endif
+#endif  // ENABLE_SD_UPDATER
+#endif  // USE_SERVO
 
 // NTP接続情報　NTP connection information.
 const char* NTPSRV      = "ntp.jst.mfeed.ad.jp";    // NTPサーバーアドレス NTP server address.
@@ -370,6 +375,20 @@ void setup()
 //cfg.external_spk_detail.omit_spk_hat    = true; // exclude SPK HAT
 //  cfg.output_power = true;
   M5.begin(cfg);
+
+#if defined(ENABLE_SD_UPDATER)
+  // ***** for SD-Updater *********************
+  SDU_lobby();
+
+  // read from SD: "/servo.txt" file
+  if (!servoTxtSDRead())
+  {
+    Serial.println("cannnot read servo.txt file ...");
+    SERVO_PIN_X = 13;
+    SERVO_PIN_Y = 14;
+  }
+  // ******************************************
+#endif 
 
   //auto brightness = M5.Display.getBrightness();
   //Serial.printf("Brightness: %d\n", brightness);
