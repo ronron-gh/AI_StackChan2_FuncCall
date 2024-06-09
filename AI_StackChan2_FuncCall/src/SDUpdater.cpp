@@ -20,9 +20,9 @@ int SERVO_PIN_Y;
 
 bool SdBegin();
 
-const String PROG_NAME = "AiStackChan2FuncCall";
+//const String PROG_NAME = "AiStackChan2FuncCall";
 
-void SDU_lobby()
+void SDU_lobby(String PROG_NAME)
 {
   SDUCfg.setAppName(PROG_NAME.c_str()); // lobby screen label: application name
   SDUCfg.setLabelMenu("< Menu");        // BtnA label: load menu.bin

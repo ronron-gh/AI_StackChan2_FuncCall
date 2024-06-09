@@ -222,10 +222,10 @@ void servo(void *args)
 
 void Servo_setup() {
 #ifdef USE_SERVO
-  if (servo_x.attach(SERVO_PIN_X, START_DEGREE_VALUE_X, DEFAULT_MICROSECONDS_FOR_0_DEGREE, DEFAULT_MICROSECONDS_FOR_180_DEGREE)) {
+  if (!servo_x.attach(SERVO_PIN_X, START_DEGREE_VALUE_X, DEFAULT_MICROSECONDS_FOR_0_DEGREE, DEFAULT_MICROSECONDS_FOR_180_DEGREE)) {
     Serial.print("Error attaching servo x");
   }
-  if (servo_y.attach(SERVO_PIN_Y, START_DEGREE_VALUE_Y, DEFAULT_MICROSECONDS_FOR_0_DEGREE, DEFAULT_MICROSECONDS_FOR_180_DEGREE)) {
+  if (!servo_y.attach(SERVO_PIN_Y, START_DEGREE_VALUE_Y, DEFAULT_MICROSECONDS_FOR_0_DEGREE, DEFAULT_MICROSECONDS_FOR_180_DEGREE)) {
     Serial.print("Error attaching servo y");
   }
   servo_x.setEasingType(EASE_QUADRATIC_IN_OUT);
@@ -378,7 +378,7 @@ void setup()
 
 #if defined(ENABLE_SD_UPDATER)
   // ***** for SD-Updater *********************
-  SDU_lobby();
+  SDU_lobby("AiStackChan2FuncCall");
 
   // read from SD: "/servo.txt" file
   if (!servoTxtSDRead())

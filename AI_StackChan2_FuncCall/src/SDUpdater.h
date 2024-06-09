@@ -7,7 +7,7 @@ extern bool USE_SERVO_ST;
 extern int SERVO_PIN_X;
 extern int SERVO_PIN_Y;
 
-extern void SDU_lobby();
+extern void SDU_lobby(String PROG_NAME);
 extern bool servoTxtSDRead();
 
 #endif  // ENABLE_SD_UPDATER
