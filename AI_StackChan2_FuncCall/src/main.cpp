@@ -6,6 +6,7 @@
 #include <M5Unified.h>
 #include <nvs.h>
 #include <Avatar.h>
+#include "StackchanExConfig.h" 
 
 #include "PlayMP3.h"
 
@@ -60,27 +61,13 @@
 #define VOICEVOX_APIKEY "SET YOUR VOICEVOX APIKEY"
 #define STT_APIKEY "SET YOUR STT APIKEY"
 
+
+StackchanExConfig system_config;
+
 #define USE_SERVO
 #ifdef USE_SERVO
-#if defined(ENABLE_SD_UPDATER)
-  // SERVO_PINはservo.txtから読み込む
-#else
-#if defined(ARDUINO_M5STACK_Core2)
-  // #define SERVO_PIN_X 13  //Core2 PORT C
-  // #define SERVO_PIN_Y 14
-  #define SERVO_PIN_X 33  //Core2 PORT A
-  #define SERVO_PIN_Y 32
-#elif defined( ARDUINO_M5STACK_FIRE )
-  #define SERVO_PIN_X 21
-  #define SERVO_PIN_Y 22
-#elif defined( ARDUINO_M5Stack_Core_ESP32 )
-  #define SERVO_PIN_X 21
-  #define SERVO_PIN_Y 22
-#elif defined( ARDUINO_M5STACK_CORES3 )
-  #define SERVO_PIN_X 18  //CoreS3 PORT C
-  #define SERVO_PIN_Y 17
-#endif
-#endif  // ENABLE_SD_UPDATER
+int SERVO_PIN_X;
+int SERVO_PIN_Y;
 #endif  // USE_SERVO
 
 // NTP接続情報　NTP connection information.
@@ -379,16 +366,8 @@ void setup()
 #if defined(ENABLE_SD_UPDATER)
   // ***** for SD-Updater *********************
   SDU_lobby("AiStackChan2FuncCall");
-
-  // read from SD: "/servo.txt" file
-  if (!servoTxtSDRead())
-  {
-    Serial.println("cannnot read servo.txt file ...");
-    SERVO_PIN_X = 13;
-    SERVO_PIN_Y = 14;
-  }
   // ******************************************
-#endif 
+#endif
 
   //auto brightness = M5.Display.getBrightness();
   //Serial.printf("Brightness: %d\n", brightness);
@@ -413,9 +392,6 @@ void setup()
     M5.Speaker.config(spk_cfg);
   }
   //M5.Speaker.begin();
-
-  Servo_setup();
-  delay(1000);
 
   {
     uint32_t nvs_handle;
@@ -464,40 +440,40 @@ void setup()
   VOICEVOX_API_KEY = String(VOICEVOX_APIKEY);
   STT_API_KEY = String(STT_APIKEY);
 #else
+
   /// settings
   if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
-    /// wifi
-    {
-      char buf[128], ssid[128], key[128];
-      if(read_sd_file("/wifi.txt", buf, sizeof(buf))){
-        read_line_from_buf(buf, ssid);
-        Serial.printf("SSID: %s\n",ssid);
-        read_line_from_buf(nullptr, key);
-        Serial.printf("Key: %s\n",key);
-        WiFi.begin(ssid, key);
-      }
-      else{
-        WiFi.begin();
-      }
-    }
+    system_config.loadConfig(SD, "/app/AiStackChan2FuncCall/SC_ExConfig.yaml");
+
+#ifdef USE_SERVO
+    // Servo
+    SERVO_PIN_X = system_config.getServoInfo(AXIS_X)->pin;
+    SERVO_PIN_Y = system_config.getServoInfo(AXIS_Y)->pin;
+    Serial.printf("Servo pin X:%d, Y:%d\n", SERVO_PIN_X, SERVO_PIN_Y);
+    Servo_setup();
+    delay(1000);
+#endif
+
+    // Wifi
+    wifi_s* wifi_info = system_config.getWiFiSetting();
+    Serial.printf("SSID: %s\n",wifi_info->ssid.c_str());
+    Serial.printf("Key: %s\n",wifi_info->password.c_str());
+    WiFi.begin(wifi_info->ssid.c_str(), wifi_info->password.c_str());
 
     /// API key
     uint32_t nvs_handle;
     if (ESP_OK == nvs_open("apikey", NVS_READWRITE, &nvs_handle)) {
-      char buf[256], key[256];
-      if(read_sd_file("/apikey.txt", buf, sizeof(buf))){
-        read_line_from_buf(buf, key);
-        nvs_set_str(nvs_handle, "openai", key);
-        Serial.printf("openai: %s\n",key);
+      api_keys_s* api_key = system_config.getAPISetting();
 
-        read_line_from_buf(nullptr, key);
-        nvs_set_str(nvs_handle, "voicevox", key);
-        Serial.printf("voicevox: %s\n",key);
+      nvs_set_str(nvs_handle, "openai", api_key->ai_service.c_str());
+      Serial.printf("openai: %s\n",api_key->ai_service.c_str());
 
-        read_line_from_buf(nullptr, key);
-        nvs_set_str(nvs_handle, "sttapikey", key);
-        Serial.printf("stt: %s\n",key);
-      }
+      nvs_set_str(nvs_handle, "voicevox", api_key->tts.c_str());
+      Serial.printf("voicevox: %s\n",api_key->tts.c_str());
+
+      nvs_set_str(nvs_handle, "sttapikey", api_key->stt.c_str());
+      Serial.printf("stt: %s\n",api_key->stt.c_str());
+
       nvs_close(nvs_handle);
     }
 
