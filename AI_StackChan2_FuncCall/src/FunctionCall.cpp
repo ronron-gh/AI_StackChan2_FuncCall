@@ -10,25 +10,84 @@
 #include "WakeWord.h"
 #include "Speech.h"
 #include "Scheduler.h"
+#include "StackchanExConfig.h" 
+#include "SDUtil.h"
 using namespace m5avatar;
 
+// 外部参照
 extern Avatar avatar;
 extern String speech_text;
 extern String speech_text_buffer;
 extern AudioGeneratorMP3 *mp3;
+extern bool servo_home;
+extern String OPENAI_API_KEY;
+extern String STT_API_KEY;
+extern String SpeechToText(bool isGoogle);
+extern void sw_tone();
 
+static String avatarText;
+
+// メモ機能関連
+String note = "";
+
+// 天気予報取得機能関連
+//   city IDはsetup()でSDカードのファイルから読み込む。
+//   city IDの定義はここを見てください。https://weather.tsukumijima.net/primary_area.xml
+String weatherUrl = "http://weather.tsukumijima.net/api/forecast/city/";
+String weatherCityID = "";
+
+// 最新ニュース取得機能関連
+//   API keyはsetup()でSDカードのファイルから読み込む。
+String newsApiUrl = "https://newsapi.org/v2/top-headlines?country=jp&apiKey=";
+String newsApiKey = "";
+
+// タイマー機能関連
 TimerHandle_t xAlarmTimer;
+bool alarmTimerCallbacked = false;
 void alarmTimerCallback(TimerHandle_t xTimer);
 void powerOffTimerCallback(TimerHandle_t xTimer);
 
 static String timer(int32_t time, const char* action);
 static String timer_change(int32_t time);
 
+// Function Call関連の初期化
+void init_func_call_settings(StackchanExConfig* system_config)
+{
+  newsApiKey = system_config->getExConfig().news.apikey;
+  weatherCityID = system_config->getExConfig().weather.city_id;
+  authMailAdr = system_config->getExConfig().mail.account;
+  authAppPass = system_config->getExConfig().mail.app_pwd;
+  toMailAdr = system_config->getExConfig().mail.to_addr;
+
+  /// メモがあるか確認
+  {
+    String filename = String(APP_DATA_PATH) + String(FNAME_NOTEPAD);
+    char buf[512];
+    if(read_sd_file(filename.c_str(), buf, sizeof(buf))){
+      note = String(buf);
+      Serial.printf("Notepad: %s\n", buf);
+    }
+  }
+}
+
 String json_ChatString = 
-"{\"model\": \"gpt-3.5-turbo-0125\","
-//"{\"model\": \"gpt-4\","
+//"{\"model\": \"gpt-4o-mini\","
+"{\"model\": \"gpt-4o\","
 "\"messages\": [{\"role\": \"user\", \"content\": \"\"}],"
 "\"functions\": ["
+  "{"
+    "\"name\": \"ask\","
+    "\"description\": \"事前にメモやリマインドの内容などを相手に質問する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {"
+        "\"text\":{"
+          "\"type\": \"string\","
+          "\"description\": \"質問の内容。\""
+        "}"
+      "}"
+    "}"
+  "},"
   "{"
     "\"name\": \"timer\","
     "\"description\": \"指定した時間が経過したら、指定した動作を実行する。指定できる動作はalarmとshutdown。\","
@@ -88,7 +147,7 @@ String json_ChatString =
   "},"
   "{"
     "\"name\": \"reminder\","
-    "\"description\": \"指定した時間にリマインドする。内容は事前に聞き取ってください\","
+    "\"description\": \"指定した時間にリマインドする。\","
     "\"parameters\": {"
       "\"type\":\"object\","
       "\"properties\": {"
@@ -106,19 +165,6 @@ String json_ChatString =
         "}"
       "},"
       "\"required\": [\"hour\",\"min\",\"text\"]"
-    "}"
-  "},"
-  "{"
-    "\"name\": \"ask\","
-    "\"description\": \"足りない情報がある場合に、相手に質問する。\","
-    "\"parameters\": {"
-      "\"type\":\"object\","
-      "\"properties\": {"
-        "\"text\":{"
-          "\"type\": \"string\","
-          "\"description\": \"質問の内容。\""
-        "}"
-      "}"
     "}"
   "},"
   "{"
@@ -238,7 +284,6 @@ String json_ChatString =
 "}";
 
 
-bool alarmTimerCallbacked = false;
 void alarmTimerCallback(TimerHandle_t _xTimer){
   xAlarmTimer = NULL;
   Serial.println("時間になりました。");
@@ -361,15 +406,12 @@ String reminder(int hour, int min, const char* text){
   response = String(String("リマインドの設定成功。")
                     + String(hour) + ":" + String(min) + " "
                     + String(text));
-
+  
+  avatarText = String(hour) + ":" + String(min) + String("に設定しました");
+  avatar.setSpeechText(avatarText.c_str());
+  delay(2000);
   return response;
 }
-
-extern bool servo_home;
-extern String OPENAI_API_KEY;
-extern String STT_API_KEY;
-extern String SpeechToText(bool isGoogle);
-extern void sw_tone();
 
 
 String ask(const char* text){
@@ -414,12 +456,12 @@ String ask(const char* text){
 }
 
 
-String note = "";
 String save_note(const char* text){
   String response = "";
+  String filename = String(APP_DATA_PATH) + String(FNAME_NOTEPAD);
   
   if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
-    auto fs = SD.open("/notepad.txt", FILE_WRITE, true);
+    auto fs = SD.open(filename.c_str(), FILE_WRITE, true);
 
     if(fs) {
       if(note == ""){
@@ -460,9 +502,11 @@ String read_note(){
 
 String delete_note(){
   String response = "";
+  String filename = String(APP_DATA_PATH) + String(FNAME_NOTEPAD);
+
 
   if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
-    auto fs = SD.open("/notepad.txt", FILE_WRITE, true);
+    auto fs = SD.open(filename.c_str(), FILE_WRITE, true);
 
     if(fs) {
       note = "";
@@ -488,7 +532,7 @@ String get_bus_time(int nNext){
   String filename = "";
   int now;
   int nNextCnt = 0;
-  struct tm timeInfo; 
+  struct tm timeInfo;
 
   if (getLocalTime(&timeInfo)) {                            // timeinfoに現在時刻を格納
     Serial.printf("現在時刻 %02d:%02d  曜日 %d\n", timeInfo.tm_hour, timeInfo.tm_min, timeInfo.tm_wday);
@@ -496,17 +540,17 @@ String get_bus_time(int nNext){
     
     switch(timeInfo.tm_wday){
       case 0:   //日
-        filename = "/bus_timetable_holiday.txt";
+        filename = String(APP_DATA_PATH) + (FNAME_BUS_TIMETABLE_HOLIDAY);
         break;
       case 1:   //月
       case 2:   //火
       case 3:   //水
       case 4:   //木
       case 5:   //金
-        filename = "/bus_timetable.txt";
+        filename = String(APP_DATA_PATH) + (FNAME_BUS_TIMETABLE);
         break;
       case 6:   //土
-        filename = "/bus_timetable_sat.txt";
+        filename = String(APP_DATA_PATH) + (FNAME_BUS_TIMETABLE_SAT);
         break;
     }
 
@@ -640,9 +684,6 @@ String delete_wakeword(int idx){
 }
 
 // 最新のニュースをWeb APIで取得する関数
-//   API keyはsetup()でSDカードのファイルから読み込む。
-String newsApiUrl = "https://newsapi.org/v2/top-headlines?country=jp&apiKey=";
-String newsApiKey = "";
 String get_news(){
   String response = "";
   DynamicJsonDocument doc(2048*10);//ここの数値が小さいと上手く取得できませんでした。
@@ -697,11 +738,6 @@ String get_news(){
 
 
 // 今日の天気をWeb APIで取得する関数
-//   city IDはsetup()でSDカードのファイルから読み込む。
-//   city IDの定義はここを見てください。https://weather.tsukumijima.net/primary_area.xml
-String weatherUrl = "http://weather.tsukumijima.net/api/forecast/city/";
-String weatherCityID = "";
-
 String get_weathers(){
   String payload;
   String response = "";

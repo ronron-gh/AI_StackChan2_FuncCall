@@ -6,24 +6,28 @@ OpenAIのFunction Callingを使って、robo8080さんの[AIｽﾀｯｸﾁｬ�
 
 ---
 
-- [AI\_StackChan2\_FuncCall](#ai_stackchan2_funccall)
-  - [開発環境](#開発環境)
-  - [ポート設定](#ポート設定)
-  - [Function Callingで呼び出せる機能](#function-callingで呼び出せる機能)
-  - [各種設定ファイル](#各種設定ファイル)
-      - [●各種APIキー（必須）](#各種apiキー必須)
-      - [●メール送受信用のGmailアカウント、アプリパスワード](#メール送受信用のgmailアカウントアプリパスワード)
-      - [●バス（電車）の時刻表](#バス電車の時刻表)
-      - [●天気予報のCity ID](#天気予報のcity-id)
-      - [●アラーム音のMP3](#アラーム音のmp3)
-      - [●NewsAPIのAPIキー](#newsapiのapiキー)
-  - [その他追加した機能](#その他追加した機能)
-    - [複数のウェイクワードに対応](#複数のウェイクワードに対応)
-    - [LEDパネルによる状態表示（CoreS3のみ）](#ledパネルによる状態表示cores3のみ)
-    - [カメラによる顔検出（CoreS3のみ）](#カメラによる顔検出cores3のみ)
-    - [スケジューラ機能【new】](#スケジューラ機能new)
-  - [注意事項](#注意事項)
-  - [バージョン履歴](#バージョン履歴)
+- [開発環境](#開発環境)
+- [ポート設定](#ポート設定)
+- [Function Callingで呼び出せる機能](#function-callingで呼び出せる機能)
+- [各種設定ファイル（SDカード）](#各種設定ファイルsdカード)
+  - [■Wi-Fi設定、APIキー（必須）](#wi-fi設定apiキー必須)
+  - [■基本設定（必須）](#基本設定必須)
+  - [■Function Calling用設定（任意）](#function-calling用設定任意)
+    - [●メール送受信用のGmailアカウント、アプリパスワード](#メール送受信用のgmailアカウントアプリパスワード)
+    - [●天気予報のCity ID](#天気予報のcity-id)
+    - [●NewsAPIのAPIキー](#newsapiのapiキー)
+  - [■Function Calling用のデータファイル（任意）](#function-calling用のデータファイル任意)
+    - [●バス（電車）の時刻表](#バス電車の時刻表)
+    - [●アラーム音のMP3](#アラーム音のmp3)
+- [その他追加した機能](#その他追加した機能)
+  - [【new】SD Updaterに対応（Core2のみ）](#newsd-updaterに対応core2のみ)
+  - [【new】ステータス表示画面](#newステータス表示画面)
+  - [スケジューラ機能](#スケジューラ機能)
+  - [複数のウェイクワードに対応](#複数のウェイクワードに対応)
+  - [LEDパネルによる状態表示（CoreS3のみ）](#ledパネルによる状態表示cores3のみ)
+  - [カメラによる顔検出（CoreS3のみ）](#カメラによる顔検出cores3のみ)
+- [注意事項](#注意事項)
+- [バージョン履歴](#バージョン履歴)
 
 
 ## 開発環境
@@ -31,20 +35,21 @@ OpenAIのFunction Callingを使って、robo8080さんの[AIｽﾀｯｸﾁｬ�
 - IDE：Platformio (VSCode)
 
 ## ポート設定
-開発者はM5Stack Core2(白)とCoreS3を使用しており、ポート設定は次のようになっています。ご自身のハードウェアに合わせて変更してください。
+開発にはM5Stack Core2(白)とCoreS3を使用しており、ポート設定は次のようになっています。ご自身のハードウェアに合わせて変更してください。
 
 | デバイス | ポートA | ポートB | ポートC |
 | --- | --- | --- | --- |
 | M5Stack Core2 | PWMサーボ | - | - |
 | M5Stack CoreS3 | NeoPixel互換LED搭載 HEXボード | - | PWMサーボ |
 
-サーボ用のポートは main.cpp 66行目付近で設定します。※シリアルサーボには対応していません。
+サーボ用のポートは StackchanExConfig.h (または後述のYAMLファイル)で設定します。  
+※シリアルサーボには対応していません。
 ```c
-#define SERVO_PIN_X 33  //Core2 PORT A
-#define SERVO_PIN_Y 32
+#define DEFAULT_SERVO_PIN_X 33  //Core2 PORT A
+#define DEFAULT_SERVO_PIN_Y 32
 ```
 
-HEXボード用のポートは HexLED.h 8行目付近で設定します。
+HEXボード用のポートは HexLED.h で設定します。
 ```c
 #define LED_DATA_PIN 2    //CoreS3 PORTA
 ```
@@ -52,58 +57,119 @@ HEXボード用のポートは HexLED.h 8行目付近で設定します。
 ## Function Callingで呼び出せる機能
 Function Callingで呼び出せる機能の一覧を下表に示します。
 
-プロンプトや関数の実装は FunctionCall.cpp にまとめています。指示に応じてｽﾀｯｸﾁｬﾝが関数を使いこなしてくれます。  
-FunctionCall.cppを改造することで、新たな機能を追加するなどのカスタマイズができます。
+プロンプトや関数の実装は FunctionCall.cpp にまとめています。指示に応じてｽﾀｯｸﾁｬﾝが関数を使いこなしてくれます。FunctionCall.cppを改造することで、新たな機能を追加するなどのカスタマイズができます。
 
-※GPT-4を使うとFunction Callの回答の精度が高まる可能性があります（検証中）。GPT-4に変更するにはFunctionCall.cpp内のプロンプトを次のように編集してください（API利用料が上がるためお気を付けください）。
+※ChatGPTのモデルはFunction Callingの精度を上げるためにGPT-4oにしています。GPT-4o miniに変更するにはFunctionCall.cpp内のプロンプトを編集してください。
 
 ```c
 String json_ChatString = 
-//"{\"model\": \"gpt-3.5-turbo\","
-"{\"model\": \"gpt-4\","
+//"{\"model\": \"gpt-4o-mini\","
+"{\"model\": \"gpt-4o\","
 "\"messages\": [{\"role\": \"user\", \"content\": \"\"}],"
 ```
 
 
 | No. | 機能 | 使用例 | デモ | 補足 |
 | --- | --- | --- | --- | --- |
-| 1 | 時計、タイマー | 「今何時？」<br>「今日は何日？」<br>「3分たったら教えて」<br>「1時間後にパワーオフして」<br> 「タイマーをキャンセルして」| [動画(X)](https://twitter.com/motoh_tw/status/1675171545533251584) |
-| 2 | メモ（SDカード） | 「～をメモして」<br>「これから言うことをメモして」<br>「メモを読んで」<br>「メモを消去して」||メモは notepad.txt というファイル名でSDカードに保存されます。|
-| 3 | メール送信 | 「メモをメールして」<br>「～をメールして」|[動画(X)](https://twitter.com/motoh_tw/status/1686403120698736640)|GmailのアプリパスワードをSDカードに保存しておく必要があります（「各種設定ファイル」参照）。|
-| 4 | メール受信 | 「メールを読んで」|[動画(X)](https://twitter.com/motoh_tw/status/1688132338293882880)|・送信と同じアプリパスワードを使います。<br>・メールサーバを3分毎に確認し、新しいメールがあれば「〇件のメールを受信しています」と教えてくれます。|
-| 5 | バス（電車）時刻表 | 「次のバスの時間は？」<br>「その次は？」 |[動画(X)](https://twitter.com/motoh_tw/status/1686404335121686528)|時刻表をSDカードのファイルに保存しておく必要があります（「各種設定ファイル」参照）。|
-| 6 | 天気予報 | 「今日の天気は？」<br>「明日の天気は？」 || ・robo8080さんが[Gistに公開してくださったコード](https://gist.github.com/robo8080/60a7bb619f6bae66aa97496371884386)を参考にさせていただきました。<br>・City IDはSDカードの設定ファイルで変更することができます（「各種設定ファイル」参照）。|
-| 7 | ウェイクワード登録 | 「ウェイクワードを登録」<br>「ウェイクワードを有効化」|||
-| 8 | リマインダー【new】 | 「〇時〇分にリマインドして」|[動画(X)](https://twitter.com/motoh_tw/status/1784956121016627358)||
-| 9 | 最新ニュース (NewsAPI連携) | 「今日のニュースは？」 || ・[K.Yamaさん(X)](https://twitter.com/USDJPY2010)から提供いただいたコードを参考にさせていただきました。<br>・APIキーをSDカードに保存しておく必要があります（「各種設定ファイル」参照）。|
+| 1 | 時刻 | 「今何時？」<br>「今日は何日？」<br>「今日は何曜日？」| |
+| 2 | タイマー | 「3分のアラームをセットして」<br>「1時間後にパワーオフして」<br> 「タイマーをキャンセルして」| [動画(X)](https://twitter.com/motoh_tw/status/1675171545533251584) |
+| 3 | メモ（SDカード） | 「～をメモして」<br>「これから言うことをメモして」<br>「メモを読んで」<br>「メモを消去して」||メモは notepad.txt というファイル名でSDカードに保存されます。|
+| 4 | メール送信 | 「メモをメールして」<br>「～をメールして」|[動画(X)](https://twitter.com/motoh_tw/status/1686403120698736640)|GmailのアプリパスワードをSDカードに保存しておく必要があります（「各種設定ファイル」参照）。|
+| 5 | メール受信 | 「メールを読んで」|[動画(X)](https://twitter.com/motoh_tw/status/1688132338293882880)|・送信と同じアプリパスワードを使います。<br>・メールサーバを3分毎に確認し、新しいメールがあれば「〇件のメールを受信しています」と教えてくれます。|
+| 6 | バス（電車）時刻表 | 「次のバスの時間は？」<br>「その次は？」 |[動画(X)](https://twitter.com/motoh_tw/status/1686404335121686528)|時刻表をSDカードのファイルに保存しておく必要があります（「各種設定ファイル」参照）。|
+| 7 | 天気予報 | 「今日の天気は？」<br>「明日の天気は？」 || ・robo8080さんが[Gistに公開してくださったコード](https://gist.github.com/robo8080/60a7bb619f6bae66aa97496371884386)を参考にさせていただきました。<br>・City IDはSDカードの設定ファイルで変更することができます（「各種設定ファイル」参照）。|
+| 8 | ウェイクワード登録 | 「ウェイクワードを登録」<br>「ウェイクワードを有効化」|||
+| 9 | リマインダ | 「新しいリマインダを設定して」|[動画(X)](https://twitter.com/motoh_tw/status/1784956121016627358)||
+| 10 | 最新ニュース (NewsAPI連携) | 「今日のニュースは？」 || ・[K.Yamaさん(X)](https://twitter.com/USDJPY2010)から提供いただいたコードを参考にさせていただきました。<br>・APIキーをSDカードに保存しておく必要があります（「各種設定ファイル」参照）。|
 
 
-## 各種設定ファイル
-以下の設定ファイルを必要に応じてSDカードに保存してください。
+## 各種設定ファイル（SDカード）
+以降に示す設定ファイルを必要に応じてSDカードに保存してください。
 
-#### ●各種APIキー（必須）
-ｽﾀｯｸﾁｬﾝとお話するためには次のAPIキーをSDカードに保存する必要があります。APIキーの取得方法などの詳細は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。
-  - ChatGPT
-  - Google Cloud TTS
-  - VoiceVox
+> v0.8.0からSD UpdaterとYAML設定ファイルに対応したため、フォルダ、ファイルの構成が変更になりました。  
+（YAMLの対応にはmongonta0716さんの[stackchan-arduinoライブラリ](https://github.com/mongonta0716/stackchan-arduino)を使用しています。）
+
+### ■Wi-Fi設定、APIキー（必須）
+以下の通り、YAMLファイルでWi-FiとAPIキーの設定をします。  
+※APIキーはｽﾀｯｸﾁｬﾝとの会話に必須です。APIキーの取得方法などの詳細は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。
+
+
+フォルダ：/yaml  
+ファイル名：SC_SecConfig.yaml
+
+```json
+wifi:
+  ssid: "********"
+  password: "********"
+
+apikey:
+  stt: "********"       # ApiKey of SpeechToText Service (VoiceVox)
+  aiservice: "********" # ApiKey of AIService (ChatGPT)
+  tts: "********"       # ApiKey of TextToSpeech Service (Google Cloud TTS)
+```
+
+
+### ■基本設定（必須）
+以下の通り、YAMLファイルでPWMサーボのピン番号を設定します。
+
+フォルダ：/yaml  
+ファイル名：SC_BasicConfig.yaml
+
+```json
+servo: 
+  pin: 
+    # ServoPin
+    # Core1 PortA X:22,Y:21 PortC X:16,Y:17
+    # Core2 PortA X:33,Y:32 PortC X:13,Y:14
+    # Stack-chanPCB Core1 X:5,Y:2 Core2 X:19,Y27
+    # When using SCS0009, x:RX, y:TX (not used).(StackchanRT Version:Core1 x16,y17, Core2: x13,y14)
+    x: 33
+    y: 32
+```
+
+※SC_BasicConfig.yamlには他にも様々な基本設定が記述されていますが、現状、本ソフトが対応しているのは上記のPWMサーボピンのみです。
+
+
+### ■Function Calling用設定（任意）
+以下の通り、YAMLファイルでFunction Callingの各機能の設定をします。使わない機能についての設定はブランクでも問題ありません。
+
+フォルダ：/app/AiStackChan2FuncCall  
+ファイル名：SC_ExConfig.yaml
+
+``` json
+mail:
+  account: "********@gmail.com"    # Gmailアカウントのメールアドレス
+  app_pwd: "********"              # Gmailアカウントのアプリパスワード
+  to_addr: "********@gmail.com"    # 送信先のメールアドレス
+
+weather:
+  city_id: "140010"     # 天気予報APIのCity ID
+
+news:
+  apikey: "********"    # NewsAPIのAPIキー
+```
 
 #### ●メール送受信用のGmailアカウント、アプリパスワード
-SDカードに次の順で保存してください。
-- 自分のGmailアカウントのメールアドレス
-- アプリパスワード（[こちら](https://support.google.com/mail/answer/185833?hl=ja)の説明に沿って取得してください）
+メール送受信機能を使う場合に設定が必要です。
+- Gmailアカウントのメールアドレス
+- Gmailアカウントのアプリパスワード（[こちら](https://support.google.com/mail/answer/185833?hl=ja)の説明に沿って取得してください）
 - 送信先のメールアドレス
 
-ファイル名：gmail.txt
-```
-XXXXXXXX@gmail.com 
-XXXXXXXXXXXXXXXX
-XXXXXXXX@XXXX.com
-```
+#### ●天気予報のCity ID
+天気予報機能を使う場合に設定が必要です。  
+City IDは[こちら](https://weather.tsukumijima.net/primary_area.xml)で調べることができます。
+
+#### ●NewsAPIのAPIキー
+　News機能を使う場合に設定が必要です。  
+APIキーは[NewsAPIのWEBページ](https://newsapi.org/)から取得できます(Developerプランであれば料金はかかりません)。
+
+### ■Function Calling用のデータファイル（任意）
 
 #### ●バス（電車）の時刻表
-SDカードに次のように時刻表を保存してください。
+時刻表機能を使う場合は、SDカードに次のように時刻表を保存してください。
 ※現行は祝日の判別はできません。
 
+フォルダ：/app/AiStackChan2FuncCall  
 ファイル名：bus_timetable.txt（平日）、bus_timetable_sat.txt（土曜）、bus_timetable_holiday.txt（日曜）
 ```
 06:01
@@ -116,34 +182,76 @@ SDカードに次のように時刻表を保存してください。
 22:03
 22:33
 ```
-#### ●天気予報のCity ID
-SDカードに次のようにCity IDを保存してください（例は神奈川県のID）。
-
-ファイル名：weather_city_id.txt
-```
-140010
-```
-City IDは[こちら](https://weather.tsukumijima.net/primary_area.xml)で調べることができます。
 
 #### ●アラーム音のMP3
-alarm.mp3という名前でSDカードに保存しておくと、タイマー機能のアラーム音として再生されます。MP3ファイルがない場合は、ｽﾀｯｸﾁｬﾝが「時間になりました」と話します。
+SDカードに次のようにMP3ファイルを保存しておくと、タイマー機能やリマインダ機能のアラーム音として再生されます。
 
-note:  
-SDカードの相性により音が途切れることがあるため、起動時にMP3ファイルをSPIFFSにコピーして使用するように改善しました。すでにSPIFFSにalarm.mp3が存在する場合は起動時のコピーは行われません。
+フォルダ：/app/AiStackChan2FuncCall  
+ファイル名：alarm.mp3
 
-#### ●NewsAPIのAPIキー
-SDカードに次のようにAPIキーを保存してください。APIキーは[NewsAPIのWEBページ](https://newsapi.org/)から取得できます(Developerプランであれば料金はかかりません)。
+※SDカードの相性により音が途切れることがあるため、起動時にMP3ファイルをSPIFFSにコピーして使用するように改善しました。すでにSPIFFSにalarm.mp3が存在する場合は起動時のコピーは行われません。
 
-ファイル名：news_api_key.txt
-```
-XXXXXXXXXXXXXXXXXXXX
-```
 
 ## その他追加した機能
+### 【new】SD Updaterに対応（Core2のみ）
+![](images/sd_updater.jpg)
+
+SD Updaterに対応し、NoRiさんの[BinsPack-for-StackChan-Core2](https://github.com/NoRi-230401/BinsPack-for-StackChan-Core2)で公開されている他のSD Updater対応アプリとの切り替えが可能になりました。
+
+【適用方法】  
+① env:m5stack-core2-sduでビルドする。  
+② ビルド結果の.pio/build/m5stack-core2-sdu/firmware.binを適切な名前（xx_AiStackChan2FuncCall.bin等）に変更し、SDカードのルートディレクトリにコピーする。
+
+※本リポジトリのCopy-to-SDフォルダにビルド済みのbinファイルを置いています。  
+※現状、Core2 V1.1ではランチャーソフトが動作しないため切り替えはできません。
+
+### 【new】ステータス表示画面
+画面の右端をタップすると表示が切り替わり、さまざまなステータスを確認できます。
+
+![](images/status_view.jpg)
+
+### スケジューラ機能
+時間を指定して任意のコールバック関数を実行することができます。サンプルとして次の動きを実装してあります。
+
+- 毎朝6:30 省エネモードから復帰
+- 毎朝7:00 今日の日付、天気、メモの内容を話す (ChatGPT＋Function Callを使用)
+- 毎晩23:30 省エネモードに遷移
+- 時報（7時から23時の間）
+- 5分置きに受信メールを確認（7時から23時の間）
+
+コールバック関数は、次のようにadd_schedule()という関数と、スケジュールの種類毎（時間指定、一定間隔で繰り返し等）に用意したScheduleクラスを使って登録します。
+
+```c++
+/* MySchedule.cpp */
+
+void init_schedule(void)
+{
+    add_schedule(new ScheduleEveryDay(6, 30, sched_fn_wake));               //6:30 省エネモードから復帰
+    add_schedule(new ScheduleEveryDay(7, 00, sched_fn_morning_info));       //7:00 今日の日付、天気、メモの内容を話す
+    add_schedule(new ScheduleEveryDay(7, 30, sched_fn_morning_info));       //7:30 同上
+    add_schedule(new ScheduleEveryDay(23, 30, sched_fn_sleep));             //23:30 省エネモードに遷移
+
+    add_schedule(new ScheduleEveryHour(sched_fn_announce_time, 7, 23));     //時報（7時から23時の間）
+
+    add_schedule(new ScheduleIntervalMinute(5, sched_fn_recv_mail, 7, 23)); //5分置きに受信メールを確認（7時から23時の間）
+}
+```
+
+各ScheduleクラスはScheduleBaseクラスを継承しており、仮想関数run()をどのようにオーバライドするかによって異なる動き（時間指定、一定間隔で繰り返し等）を実現しています。現在用意しているScheduleクラスは次の通りです。
+
+| クラス | 動作 | 備考 |
+| --- | --- | --- |
+| ScheduleEveryDay | 毎日、指定した時間にコールバック関数を実行する | |
+| ScheduleEveryHour | 毎時、コールバック関数を実行する（主に時報用）| |
+| ScheduleIntervalMinute | 指定した間隔[分]でコールバック関数を繰り返し実行する | |
+| ScheduleReminder | 一度だけ指定した時間にコールバック関数を実行する | Function Callのリマインダー機能で使用している |
+
+
+
 ### 複数のウェイクワードに対応
 AIｽﾀｯｸﾁｬﾝ2同様、ウェイクワードに対応しています。使い方は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。  
 
-また、v0.6.0から、ウェイクワードを10個まで登録することが可能です。これにより、家族全員の声に反応するようにもできます。
+また、v0.6.0から、ウェイクワードを10個まで登録することが可能です。これにより、家族全員の声に反応するようにすることも可能になりました。
 
 登録したウェイクワードのデータはSPIFFSにwakeword#.binという名前で保存されます。現行、10個に到達すると新たなウェイクワードは登録できませんので、Function Callingで「ウェイクワードの#番を削除して」とお願いするか、FFFTP等のFTPクライアントソフトで不要なウェイクワードを削除してください（FTPはユーザ名：stackchan、パスワード：stackchan）。
 
@@ -193,41 +301,6 @@ build_flags=
 ```
 
 
-### スケジューラ機能【new】
-時間を指定して任意のコールバック関数を実行することができます。サンプルとして次の動きを実装してあります。
-
-- 毎朝6:30 省エネモードから復帰
-- 毎朝7:00 今日の日付、天気、メモの内容を話す (ChatGPT＋Function Callを使用)
-- 毎晩23:30 省エネモードに遷移
-- 時報（7時から23時の間）
-- 5分置きに受信メールを確認（7時から23時の間）
-
-コールバック関数は、次のようにadd_schedule()という関数と、スケジュールの種類毎（時間指定、一定間隔で繰り返し等）に用意したScheduleクラスを使って登録します。
-
-```c++
-/* MySchedule.cpp */
-
-void init_schedule(void)
-{
-    add_schedule(new ScheduleEveryDay(6, 30, sched_fn_wake));               //6:30 省エネモードから復帰
-    add_schedule(new ScheduleEveryDay(7, 00, sched_fn_morning_info));       //7:00 今日の日付、天気、メモの内容を話す
-    add_schedule(new ScheduleEveryDay(7, 30, sched_fn_morning_info));       //7:30 同上
-    add_schedule(new ScheduleEveryDay(23, 30, sched_fn_sleep));             //23:30 省エネモードに遷移
-
-    add_schedule(new ScheduleEveryHour(sched_fn_announce_time, 7, 23));     //時報（7時から23時の間）
-
-    add_schedule(new ScheduleIntervalMinute(5, sched_fn_recv_mail, 7, 23)); //5分置きに受信メールを確認（7時から23時の間）
-}
-```
-
-各ScheduleクラスはScheduleBaseクラスを継承しており、仮想関数run()をどのようにオーバライドするかによって異なる動き（時間指定、一定間隔で繰り返し等）を実現しています。現在用意しているScheduleクラスは次の通りです。
-
-| クラス | 動作 | 備考 |
-| --- | --- | --- |
-| ScheduleEveryDay | 毎日、指定した時間にコールバック関数を実行する | |
-| ScheduleEveryHour | 毎時、コールバック関数を実行する（主に時報用）| |
-| ScheduleIntervalMinute | 指定した間隔[分]でコールバック関数を繰り返し実行する | |
-| ScheduleReminder | 一度だけ指定した時間にコールバック関数を実行する | Function Callのリマインダー機能で使用している |
 
 ## 注意事項
 - フォルダ名が長いため、ワークスペースの場所によってはライブラリのインクルードパスが通らない場合があります。
@@ -263,9 +336,14 @@ void init_schedule(void)
   - アラーム機能実行中に残り時間を吹き出しで表示するように修正。
   - コードの一部をリファクタリング。
   - Open AI用RootCA証明書を更新。
-- v0.7.0 (mainタグ)
+- v0.7.0
   - Function Callの実行において情報が不足している場合にｽﾀｯｸﾁｬﾝから自発的に質問をするように改善。
   - Function Callの機能にリマインダーを追加。
   - スケジューラ機能を追加。
-
+- v0.8.0 (mainタグ)
+  - SD Updaterに対応。
+  - YAMLの設定ファイルに対応。
+  - ステータス表示画面を追加。
+  - ChatGPTのモデルをGPT4oに変更。
+  - Open AI用RootCA証明書を更新。
 

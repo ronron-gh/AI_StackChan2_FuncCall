@@ -20,11 +20,28 @@
   #define DEFAULT_SERVO_PIN_Y 17
 #endif
 
-// [TODO] Function Call用設定に対応
+//--- Function Call用設定 ---
+//Gmailアカウント、アプリパスワード
+typedef struct FnMail {
+    String account;
+    String app_pwd;
+    String to_addr;
+} mail_s;
+
+//天気予報APIのCity ID
+typedef struct FnWeather {
+    String city_id;
+} weather_s;
+
+//NEWS APIのAPIキー
+typedef struct FnNews {
+    String apikey;
+} news_s;
+
 typedef struct ExConfig {
-    String item1;
-    int    item2;
-    bool   item3;
+    mail_s mail;
+    weather_s weather;
+    news_s news;
 } ex_config_s;
 
 
@@ -45,13 +62,11 @@ class StackchanExConfig : public StackchanSystemConfig
         void printExtParameters(void) override;
 
         ex_config_s getExConfig() { return _ex_parameters; }
-        void setItem1(String item1) { _ex_parameters.item1 = item1; }
-        void setItem2(int    item2) { _ex_parameters.item2 = item2; }
-        void setItem3(bool   item3) { _ex_parameters.item3 = item3; }
         void setExConfig(ex_config_s config) { _ex_parameters = config; } 
 
         void basicConfigNotFoundCallback(void) override;
         void secretConfigNotFoundCallback(void) override;
+        void extendConfigNotFoundCallback(void);
 
 };
 

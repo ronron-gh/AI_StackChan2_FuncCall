@@ -17,6 +17,14 @@ void add_schedule(ScheduleBase* schedule)
     }
 }
 
+ScheduleBase* get_schedule(int idx)
+{
+    if(idx > MAX_SCHED_NUM){
+        return nullptr;
+    }
+    return scheduleList[idx];
+}
+
 void run_schedule(void)
 {
     struct tm now_time;
@@ -55,6 +63,7 @@ ScheduleEveryDay::ScheduleEveryDay(int hour, int min, void (*func)(void))
 {
     struct tm now_time = {};
 
+    sched_type = SCHED_EVERY_DAY;
     sched_hour = hour;
     sched_min = min;
     callback = func;
@@ -107,6 +116,7 @@ ScheduleEveryHour::ScheduleEveryHour(void (*func)(void), int _start_hour, int _e
 {
     struct tm now_time = {};
 
+    sched_type = SCHED_EVERY_HOUR;
     start_hour = _start_hour;
     end_hour = _end_hour;
     callback = func;
@@ -135,6 +145,7 @@ ScheduleReminder::ScheduleReminder(int hour, int min, String _remind_text)
 {
     struct tm now_time = {};
 
+    sched_type = SCHED_REMINDER;
     sched_hour = hour;
     sched_min = min;
     remind_text = _remind_text;
@@ -179,11 +190,16 @@ void ScheduleReminder::run(struct tm now_time)
 
 }
 
+String ScheduleReminder::get_time_string()
+{
+    return String(sched_hour) + String(":") + String(sched_min);
+}
 
 ScheduleIntervalMinute::ScheduleIntervalMinute(int _interval_min, void (*func)(void), int _start_hour, int _end_hour)
 {
     struct tm now_time = {};
 
+    sched_type = SCHED_INTERVAL_MINUTE;
     interval_min = _interval_min;
     start_hour = _start_hour;
     end_hour = _end_hour;

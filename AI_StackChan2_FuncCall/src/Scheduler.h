@@ -5,10 +5,17 @@
 
 #define MAX_SCHED_NUM   (50)
 
-
+typedef enum e_sched_type
+{
+    SCHED_EVERY_DAY,
+    SCHED_EVERY_HOUR,
+    SCHED_REMINDER,
+    SCHED_INTERVAL_MINUTE
+} SCHED_TYPE;
 
 class ScheduleBase{
 protected:
+    SCHED_TYPE sched_type;      //子クラスの判別用（本当はtypeinfoを使いたいがビルドに失敗した）
     struct tm prev_time;
     void (*callback)(void);
 
@@ -16,6 +23,7 @@ public:
     bool destroy;
     ScheduleBase();
     virtual void run(struct tm now_time);
+    SCHED_TYPE get_sched_type(){ return sched_type; };
 
 };
 
@@ -49,6 +57,8 @@ private:
 public:
     ScheduleReminder(int hour, int min, String _remind_text);
     void run(struct tm now_time);
+    String get_time_string();
+    String get_remind_string(){ return remind_text; };
 };
 
 
@@ -66,6 +76,7 @@ public:
 
 
 extern void add_schedule(ScheduleBase* schedule);
+extern ScheduleBase* get_schedule(int idx);
 extern void run_schedule(void);
 
 

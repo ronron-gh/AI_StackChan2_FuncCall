@@ -53,6 +53,7 @@
 #include "MySchedule.h"
 #include "WatchDog.h"
 #include "SDUpdater.h"
+#include "UiManager.h"
 
 #define USE_SDCARD
 #define WIFI_SSID "SET YOUR WIFI SSID"
@@ -63,6 +64,7 @@
 
 
 StackchanExConfig system_config;
+UiBase* current_ui;
 
 #define USE_SERVO
 #ifdef USE_SERVO
@@ -93,7 +95,7 @@ const Expression expressions_table[] = {
   Expression::Sad,
   Expression::Angry
 };
-String avatarText;
+
 
 
 FtpServer ftpSrv;   //set #define FTP_DEBUG in ESP8266FtpServer.h to see ftp verbose on serial
@@ -110,10 +112,6 @@ String STT_API_KEY = "";
 bool wakeword_is_enable = false;
 #endif
 //---------------------------------------------
-
-//String speech_text = "";
-//String speech_text_buffer = "";
-
 
 
 
@@ -225,33 +223,6 @@ void Servo_setup() {
 #endif
 }
 
-struct box_t
-{
-  int x;
-  int y;
-  int w;
-  int h;
-  int touch_id = -1;
-
-  void setupBox(int x, int y, int w, int h) {
-    this->x = x;
-    this->y = y;
-    this->w = w;
-    this->h = h;
-  }
-  bool contain(int x, int y)
-  {
-    return this->x <= x && x < (this->x + this->w)
-        && this->y <= y && y < (this->y + this->h);
-  }
-};
-static box_t box_servo;
-static box_t box_stt;
-static box_t box_BtnA;
-static box_t box_BtnC;
-#if defined(ENABLE_FACE_DETECT)
-static box_t box_subWindow;
-#endif
 
 void Wifi_setup() {
   // 前回接続時情報で接続する
@@ -363,6 +334,9 @@ void setup()
 //  cfg.output_power = true;
   M5.begin(cfg);
 
+  /// シリアル出力のログレベルを VERBOSEに設定
+  M5.Log.setLogLevel(m5::log_target_serial, ESP_LOG_VERBOSE);
+
 #if defined(ENABLE_SD_UPDATER)
   // ***** for SD-Updater *********************
   SDU_lobby("AiStackChan2FuncCall");
@@ -443,6 +417,8 @@ void setup()
 
   /// settings
   if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+
+    // この関数ですべてのYAMLファイル(Basic, Secret, Extend)を読み込む
     system_config.loadConfig(SD, "/app/AiStackChan2FuncCall/SC_ExConfig.yaml");
 
 #ifdef USE_SERVO
@@ -477,60 +453,12 @@ void setup()
       nvs_close(nvs_handle);
     }
 
-    /// News API key
-    {
-      char buf[128], key[128];
-      if(read_sd_file("/news_api_key.txt", buf, sizeof(buf))){
-        read_line_from_buf(buf, key);
-        newsApiKey = String(key);
-      }
-      Serial.printf("NewsAPI key: %s\n", newsApiKey.c_str());
-    }
-
-    /// Weather city ID
-    {
-      char buf[128], key[128];
-      if(read_sd_file("/weather_city_id.txt", buf, sizeof(buf))){
-        read_line_from_buf(buf, key);
-        weatherCityID = String(key);
-      }
-      else{
-        weatherCityID = "130010";
-      }
-      Serial.printf("Weather City ID: %s\n", weatherCityID);
-    }
-
-    /// Gmail
-    {
-      char buf[256], key[256];
-      if(read_sd_file("/gmail.txt", buf, sizeof(buf))){
-        read_line_from_buf(buf, key);
-        authMailAdr = String(key);
-        Serial.println("My mail addr: " + authMailAdr);
-
-        read_line_from_buf(nullptr, key);
-        authAppPass = String(key);
-        Serial.println("My mail pass: " + authAppPass);
-
-        read_line_from_buf(nullptr, key);
-        toMailAdr = String(key);
-        Serial.println("To mail addr: " + toMailAdr);
-      }
-    }
-
-    /// メモがあるか確認
-    {
-      char buf[512];
-      if(read_sd_file("/notepad.txt", buf, sizeof(buf))){
-        note = String(buf);
-        Serial.printf("Notepad: %s\n", buf);
-      }
-    }
+    // Function Call関連の設定
+    init_func_call_settings(&system_config);
 
     //SD.end();
   } else {
     WiFi.begin();
-    weatherCityID = "130010";
   }
 
   {
@@ -654,15 +582,8 @@ void setup()
   avatar.setSpeechFont(&fonts::efontJA_16);
 
 //  M5.Speaker.setVolume(200);
-  box_servo.setupBox(80, 120, 80, 80);
-#if defined(ENABLE_FACE_DETECT)
-  box_stt.setupBox(107, 0, M5.Display.width()-107, 80);
-  box_subWindow.setupBox(0, 0, 107, 80);
-#else
-  box_stt.setupBox(0, 0, M5.Display.width(), 60);
-#endif
-  box_BtnA.setupBox(0, 100, 40, 60);
-  box_BtnC.setupBox(280, 100, 40, 60);
+
+  current_ui = init_ui();
 
   //時刻同期
   time_sync(NTPSRV, GMT_OFFSET, DAYLIGHT_OFFSET);
@@ -694,7 +615,7 @@ void setup()
 String random_words[18] = {"あなたは誰","楽しい","怒った","可愛い","悲しい","眠い","ジョークを言って","泣きたい","怒ったぞ","こんにちは","お疲れ様","詩を書いて","疲れた","お腹空いた","嫌いだ","苦しい","俳句を作って","歌をうたって"};
 int random_time = -1;
 bool random_speak = true;
-static int lastms1 = 0;
+int lastms1 = 0;
 
 void report_batt_level(){
   char buff[100];
@@ -807,100 +728,23 @@ void SST_ChatGPT() {
 
 void loop()
 {
-  static int lastms = 0;
-
-  if (random_time >= 0 && millis() - lastms1 > random_time)
-  {
-    lastms1 = millis();
-    random_time = 40000 + 1000 * random(30);
-
-    exec_chatGPT(random_words[random(18)]);
-#if defined(ENABLE_WAKEWORD)
-    mode = 0;
-#endif
-    
-  }
-
-  
-#if defined(ENABLE_FACE_DETECT)
-  //顔が検出されれば音声認識を開始。
-  bool isFaceDetected;
-  isFaceDetected = camera_capture_and_face_detect();
-  if(!isSilentMode){
-    if(isFaceDetected){
-      avatar.set_isSubWindowEnable(false);
-      sw_tone();
-      SST_ChatGPT();                              //音声認識
-      //exec_chatGPT(random_words[random(18)]);   //独り言
-
-      // フレームバッファを読み捨てる（ｽﾀｯｸﾁｬﾝが応答した後に、過去のフレームで顔検出してしまうのを防ぐため）
-      M5.In_I2C.release();
-      camera_fb_t *fb = esp_camera_fb_get();
-      esp_camera_fb_return(fb);
-    }
-  }
-  else{
-    if(isFaceDetected){
-      avatar.setExpression(Expression::Happy);
-      //delay(2000);
-      //avatar.setExpression(Expression::Neutral);
-    }
-    else{
-      avatar.setExpression(Expression::Neutral);
-    }
-  }
-
-#endif
 
   M5.update();
+  current_ui = get_current_ui();
 
-#if defined(ENABLE_WAKEWORD)
-  if (M5.BtnA.wasPressed() || wakeword_enable_required)
+  if (M5.BtnA.wasPressed())
   {
-    wakeword_enable_required = false;
-
-    if(mode >= 0){
-      sw_tone();
-      if(mode == 0){
-        avatar.setSpeechText("ウェイクワード有効");
-        mode = 1;
-        wakeword_is_enable = true;
-      } else {
-        avatar.setSpeechText("ウェイクワード無効");
-        mode = 0;
-        wakeword_is_enable = false;
-      }
-      delay(1000);
-      avatar.setSpeechText("");
-    }
+    current_ui->btnA_pressed();
   }
 
-  if (M5.BtnB.pressedFor(2000) || register_wakeword_required) {
-    register_wakeword_required = false;
-
-    M5.Mic.end();
-    M5.Speaker.tone(1000, 100);
-    delay(500);
-    M5.Speaker.tone(600, 100);
-    delay(1000);
-    M5.Speaker.end();
-    M5.Mic.begin();
-    random_time = -1;           //独り言停止
-    random_speak = true;
-    wakeword_is_enable = false; //wakeword 無効
-    mode = -1;
-#ifdef USE_SERVO
-      servo_home = true;
-      delay(500);
-#endif
-    avatar.setSpeechText("ウェイクワード登録開始");
+  if (M5.BtnB.pressedFor(2000))
+  {
+    current_ui->btnB_longPressed();
   }
-#endif  //ENABLE_WAKEWORD
 
   if (M5.BtnC.wasPressed())
   {
-    sw_tone();
-    report_batt_level();
+    current_ui->btnC_pressed();
   }
 
 
@@ -910,118 +754,16 @@ void loop()
   {
     auto t = M5.Touch.getDetail();
     if (t.wasPressed())
-    {          
-      if (box_stt.contain(t.x, t.y)&&(!mp3->isRunning()))
-      {
-#if defined(ENABLE_FACE_DETECT)
-        avatar.set_isSubWindowEnable(false);
-#endif
-        sw_tone();
-        SST_ChatGPT();
-      }
-#ifdef USE_SERVO
-      if (box_servo.contain(t.x, t.y))
-      {
-        //servo_home = !servo_home;
-        sw_tone();
-      }
-#endif
-      if (box_BtnA.contain(t.x, t.y))
-      {
-#if defined(ENABLE_FACE_DETECT)
-        isSilentMode = !isSilentMode;
-        if(isSilentMode){
-          avatar.setSpeechText("サイレントモード");
-        }
-        else{
-          avatar.setSpeechText("サイレントモード解除");
-        }
-        delay(2000);
-        avatar.setSpeechText("");
-#else
-        sw_tone();
-        switch_monologue_mode();
-#endif
-      }
-      if (box_BtnC.contain(t.x, t.y))
-      {
-#if defined(ENABLE_FACE_DETECT)
-        avatar.set_isSubWindowEnable(false);
-#endif
-        sw_tone();
-        report_batt_level();
-      }
-#if defined(ENABLE_FACE_DETECT)
-      if (box_subWindow.contain(t.x, t.y))
-      {
-        isSubWindowON = !isSubWindowON;
-        avatar.set_isSubWindowEnable(isSubWindowON);
-      }
-#endif //ENABLE_FACE_DETECT
+    {
+      current_ui->display_touched(t.x, t.y);
     }
   }
 #endif
 
-
-  if (alarmTimerCallbacked  && !mp3->isRunning()) {
-    alarmTimerCallbacked = false;
-#if defined(ENABLE_FACE_DETECT)
-    avatar.set_isSubWindowEnable(false);
-#endif    
-    //if(!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
-    if(!SPIFFS.begin(true)){
-      Serial.println("Failed to mount SPIFFS.");
-    }
-    else{
-      playMP3File("/alarm.mp3");
-      speech("時間になりました。");
-    }
-  }
 
   web_server_handle_client();
   ftpSrv.handleFTP();
-  
-#if defined(ENABLE_WAKEWORD)
-  if (mode == 0) { /* return; */ }
-  else if (mode < 0) {
-    int idx = wakeword_regist();
-    if(idx >= 0){
-      String text = String("ウェイクワード#") + String(idx) + String("登録終了");
-      avatar.setSpeechText(text.c_str());
-      delay(1000);
-      avatar.setSpeechText("");
-      //mode = 0;
-      //wakeword_is_enable = false;
-      mode = 1;
-      wakeword_is_enable = true;
-#ifdef USE_SERVO
-      //servo_home = false;
-#endif
-    }
-  }
-  else if (mode > 0 && wakeword_is_enable) {
-    int idx = wakeword_compare();
-    if( idx >= 0){
-      Serial.println("wakeword_compare OK!");
-      String text = String("ウェイクワード#") + String(idx);
-      avatar.setSpeechText(text.c_str());
-      sw_tone();
-      SST_ChatGPT();
-    }
-  }
-#endif  //ENABLE_WAKEWORD
 
-  if(xAlarmTimer != NULL){
-    TickType_t xRemainingTime;
-
-    /* Query the period of the timer that expires. */
-    xRemainingTime = xTimerGetExpiryTime( xAlarmTimer ) - xTaskGetTickCount();
-    avatarText = "残り" + String(xRemainingTime / 1000) + "秒";
-    avatar.setSpeechText(avatarText.c_str());
-  }
-  //else{
-  //  avatar.setSpeechText("");
-  //}
 
 #if defined( ENABLE_HEX_LED )
   if(recvMessages.size() > 0){
@@ -1031,6 +773,8 @@ void loop()
 
   run_schedule();
   //reset_watchdog();
+
+  current_ui->idle();
   
 }
 
