@@ -223,19 +223,18 @@ void exec_chatGPT(String text) {
 
     response = chatGpt(json_string, &calledFunc);
 
-    // 返答をチャット履歴に追加
-    if(calledFunc == ""){
-      chatHistory.push_back(String("assistant"), String(""), response);
-    }
-    else{
-      chatHistory.push_back(String("function"), calledFunc, response);      
-    }
 
-    if(calledFunc == ""){
+    if(calledFunc == ""){   // Function Callなし ／ Function Call繰り返しの完了
+      chatHistory.push_back(String("assistant"), String(""), response);   // 返答をチャット履歴に追加
       speech(response);
-      //チャット履歴の容量を圧迫しないように、functionロールを削除する
-      chatHistory.clean_function_role();
       break;
     }
+    else{   // Function Call繰り返し中。ループを継続
+      chatHistory.push_back(String("function"), calledFunc, response);   // 返答をチャット履歴に追加   
+    }
+
   }
+
+  //チャット履歴の容量を圧迫しないように、functionロールを削除する
+  chatHistory.clean_function_role();
 }
