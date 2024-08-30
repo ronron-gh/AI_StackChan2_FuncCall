@@ -51,7 +51,7 @@ private:
     box_t box_stt;
     box_t box_BtnA;
     box_t box_BtnC;
-    #if defined(ENABLE_FACE_DETECT)
+    #if defined(ENABLE_CAMERA)
     box_t box_subWindow;
     #endif
     String avatarText;

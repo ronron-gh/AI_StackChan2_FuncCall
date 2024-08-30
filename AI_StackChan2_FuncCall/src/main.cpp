@@ -45,9 +45,9 @@
 #include "HexLED.h"
 #endif
 
-#if defined( ENABLE_FACE_DETECT )
+#if defined( ENABLE_CAMERA )
 #include <Camera.h>
-#endif    //ENABLE_FACE_DETECT
+#endif    //ENABLE_CAMERA
 
 #include "Scheduler.h"
 #include "MySchedule.h"
@@ -346,7 +346,7 @@ void setup()
   //auto brightness = M5.Display.getBrightness();
   //Serial.printf("Brightness: %d\n", brightness);
 
-  chat_doc = SpiRamJsonDocument(1024*30);
+  chat_doc = SpiRamJsonDocument(1024*50);
 
   {
     auto micConfig = M5.Mic.config();
@@ -572,7 +572,7 @@ void setup()
   wakeword_init();
 #endif
 
-#if defined(ENABLE_FACE_DETECT)
+#if defined(ENABLE_CAMERA)
   avatar.init(16);
 #else
   avatar.init();
@@ -597,7 +597,7 @@ void setup()
   //hex_led_ptn_boot();
 #endif 
 
-#if defined(ENABLE_FACE_DETECT)
+#if defined(ENABLE_CAMERA)
   camera_init();
   avatar.set_isSubWindowEnable(true);
 #endif
@@ -669,7 +669,7 @@ void sw_tone(){
 #endif
 }
 
-void SST_ChatGPT() {
+void STT_ChatGPT(const char *base64_buf = NULL) {
   bool prev_servo_home = servo_home;
   random_speak = true;
   random_time = -1;
@@ -703,7 +703,7 @@ void SST_ChatGPT() {
 #if defined( ENABLE_HEX_LED )
     hex_led_ptn_accept();
 #endif
-    exec_chatGPT(ret);
+    exec_chatGPT(ret, base64_buf);
     avatar.setSpeechText("");
     avatar.setExpression(Expression::Neutral);
     servo_home = true;

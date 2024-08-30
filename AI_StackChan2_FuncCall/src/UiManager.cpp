@@ -10,7 +10,7 @@
 #include <WiFiClientSecure.h>
 #include "Scheduler.h"
 #include "FunctionCall.h"
-#if defined( ENABLE_FACE_DETECT )
+#if defined( ENABLE_CAMERA )
 #include <Camera.h>
 #endif
 
@@ -24,7 +24,7 @@ extern int random_time;
 extern bool random_speak;
 extern void sw_tone();
 extern void report_batt_level();
-extern void SST_ChatGPT();
+extern void STT_ChatGPT(const char *base64_buf = nullptr);
 extern void switch_monologue_mode();
 
 extern String random_words[];
@@ -126,7 +126,7 @@ void UiBase::idle(void){};
 UiAvatar::UiAvatar(void)
 {
   box_servo.setupBox(80, 120, 80, 80);
-#if defined(ENABLE_FACE_DETECT)
+#if defined(ENABLE_CAMERA)
   box_stt.setupBox(107, 0, M5.Display.width()-107, 80);
   box_subWindow.setupBox(0, 0, 107, 80);
 #else
@@ -200,11 +200,21 @@ void UiAvatar::display_touched(int16_t x, int16_t y)
 {
   if (box_stt.contain(x, y)/*&&(!mp3->isRunning())*/)
   {
-#if defined(ENABLE_FACE_DETECT)
-    avatar.set_isSubWindowEnable(false);
-#endif
     sw_tone();
-    SST_ChatGPT();
+#if defined(ENABLE_CAMERA)
+    avatar.set_isSubWindowEnable(false);
+    if(isSubWindowON){
+      String base64;
+      bool ret = camera_capture_base64(base64);
+      STT_ChatGPT(base64.c_str());
+    }
+    else{
+      STT_ChatGPT();
+    }
+    avatar.set_isSubWindowEnable(isSubWindowON);
+#else
+    STT_ChatGPT();
+#endif
   }
 #ifdef USE_SERVO
   if (box_servo.contain(t.x, t.y))
@@ -215,7 +225,7 @@ void UiAvatar::display_touched(int16_t x, int16_t y)
 #endif
   if (box_BtnA.contain(x, y))
   {
-#if defined(ENABLE_FACE_DETECT)
+#if defined(ENABLE_CAMERA)
     isSilentMode = !isSilentMode;
     if(isSilentMode){
       avatar.setSpeechText("サイレントモード");
@@ -232,19 +242,16 @@ void UiAvatar::display_touched(int16_t x, int16_t y)
   }
   if (box_BtnC.contain(x, y))
   {
-#if defined(ENABLE_FACE_DETECT)
-    avatar.set_isSubWindowEnable(false);
-#endif
     //sw_tone();
     change_ui();
   }
-#if defined(ENABLE_FACE_DETECT)
+#if defined(ENABLE_CAMERA)
   if (box_subWindow.contain(x, y))
   {
     isSubWindowON = !isSubWindowON;
     avatar.set_isSubWindowEnable(isSubWindowON);
   }
-#endif //ENABLE_FACE_DETECT
+#endif //ENABLE_CAMERA
 
 }
 
@@ -252,24 +259,29 @@ void UiAvatar::idle(void)
 {
 
   /// Face detect ///
-#if defined(ENABLE_FACE_DETECT)
+#if defined(ENABLE_CAMERA)
   //顔が検出されれば音声認識を開始。
   bool isFaceDetected;
   isFaceDetected = camera_capture_and_face_detect();
   if(!isSilentMode){
+
+#if defined(ENABLE_FACE_DETECT)
     if(isFaceDetected){
       avatar.set_isSubWindowEnable(false);
       sw_tone();
-      SST_ChatGPT();                              //音声認識
+      STT_ChatGPT();                              //音声認識
       //exec_chatGPT(random_words[random(18)]);   //独り言
 
       // フレームバッファを読み捨てる（ｽﾀｯｸﾁｬﾝが応答した後に、過去のフレームで顔検出してしまうのを防ぐため）
       M5.In_I2C.release();
       camera_fb_t *fb = esp_camera_fb_get();
       esp_camera_fb_return(fb);
+      avatar.set_isSubWindowEnable(isSubWindowON);
     }
+#endif
   }
   else{
+#if defined(ENABLE_FACE_DETECT)
     if(isFaceDetected){
       avatar.setExpression(Expression::Happy);
       //delay(2000);
@@ -278,9 +290,10 @@ void UiAvatar::idle(void)
     else{
       avatar.setExpression(Expression::Neutral);
     }
+#endif
   }
 
-#endif  //ENABLE_FACE_DETECT
+#endif  //ENABLE_CAMERA
 
 
   /// 独り言 ///
@@ -323,7 +336,7 @@ void UiAvatar::idle(void)
       String text = String("ウェイクワード#") + String(idx);
       avatar.setSpeechText(text.c_str());
       sw_tone();
-      SST_ChatGPT();
+      STT_ChatGPT();
     }
   }
 
@@ -354,7 +367,7 @@ void UiAvatar::idle(void)
 
   if (alarmTimerCallbacked) {
     alarmTimerCallbacked = false;
-#if defined(ENABLE_FACE_DETECT)
+#if defined(ENABLE_CAMERA)
     avatar.set_isSubWindowEnable(false);
 #endif    
     //if(!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
@@ -365,6 +378,7 @@ void UiAvatar::idle(void)
       playMP3File("/alarm.mp3");
       speech("時間になりました。");
     }
+    avatar.set_isSubWindowEnable(isSubWindowON);
   }
 
 }

@@ -1,9 +1,11 @@
-#if defined(ENABLE_FACE_DETECT)
+#if defined(ENABLE_CAMERA)
 
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <Avatar.h>
 #include "Camera.h"
+#include <SPIFFS.h>
+#include <base64.h>
 using namespace m5avatar;
 extern Avatar avatar;
 
@@ -45,7 +47,7 @@ static camera_config_t camera_config = {
     .grab_mode    = CAMERA_GRAB_WHEN_EMPTY,
 };
 
-esp_err_t camera_init(){
+esp_err_t camera_init(void){
 
     //initialize the camera
     M5.In_I2C.release();
@@ -55,6 +57,9 @@ esp_err_t camera_init(){
         M5.Display.println("Camera Init Failed");
         return err;
     }
+
+    sensor_t *s = esp_camera_sensor_get();
+    s->set_hmirror(s, 0);        // 左右反転
 
     return ESP_OK;
 }
@@ -133,19 +138,19 @@ void debug_check_heap_free_size(void){
 }
 
 
-bool camera_capture_and_face_detect(){
+bool camera_capture_and_face_detect(void){
   bool isDetected = false;
 
   //acquire a frame
   M5.In_I2C.release();
-  camera_fb_t * fb = esp_camera_fb_get();
+  camera_fb_t *fb = esp_camera_fb_get();
   if (!fb) {
     //Serial.println("Camera Capture Failed");
     M5.Display.println("Camera Capture Failed");
     return ESP_FAIL;
   }
 
-
+#if defined(ENABLE_FACE_DETECT)
   int face_id = 0;
 
 #if TWO_STAGE
@@ -175,6 +180,7 @@ bool camera_capture_and_face_detect(){
     draw_face_boxes(&rfb, &results, face_id);
 
   }
+#endif  //ENABLE_FACE_DETECT
 
   if(isSubWindowON){
     avatar.updateSubWindow(fb->buf);
@@ -192,5 +198,52 @@ bool camera_capture_and_face_detect(){
   return isDetected;
 }
 
+
+
+bool camera_capture_base64(String& out)
+{
+  //acquire a frame
+  M5.In_I2C.release();
+  camera_fb_t *fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("Camera Capture Failed");
+    return false;
+  }
+
+  size_t jpg_buf_len = 0;
+  uint8_t *jpg_buf   = NULL;
+  int ret;
+  bool jpeg_converted = frame2jpg(fb, 80, &jpg_buf, &jpg_buf_len);
+  esp_camera_fb_return(fb);
+  fb = NULL;
+  if (!jpeg_converted) {
+    Serial.println("JPEG compression failed");
+    return false;
+  }
+
+#if 0 //debug
+  File fdst = SPIFFS.open("/capture.jpg", FILE_WRITE);
+  if ((ret = fdst.write(jpg_buf, jpg_buf_len)) < jpg_buf_len) {
+    Serial.printf("write spiffs failed: %d - %d\n", ret, jpg_buf_len);
+    return false;
+  }
+#endif
+
+
+  out = base64::encode(jpg_buf, jpg_buf_len);
+
+#if 0 //debug
+  fdst = SPIFFS.open("/capture_base64.txt", FILE_WRITE);
+  if ((ret = fdst.write((const uint8_t*)out.c_str(), out.length())) < out.length()) {
+    Serial.printf("write spiffs failed: %d - %d\n", ret, out.length());
+    return false;
+  }
+#endif
+
+  free(jpg_buf);
+  jpg_buf = NULL;
+  
+  return true;
+}
 
 #endif

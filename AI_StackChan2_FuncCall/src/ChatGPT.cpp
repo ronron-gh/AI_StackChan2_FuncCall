@@ -176,25 +176,32 @@ String chatGpt(String json_string, String* calledFunc) {
 
 
 #define MAX_REQUEST_COUNT  (10)
-void exec_chatGPT(String text) {
+void exec_chatGPT(String text, const char *base64_buf = NULL) {
   static String response = "";
   String calledFunc = "";
-  String funcCallMode = "auto";
+  //String funcCallMode = "auto";
+  bool image_flag = false;
 
   //Serial.println(InitBuffer);
   //init_chat_doc(InitBuffer.c_str());
 
   // 質問をチャット履歴に追加
-  chatHistory.push_back(String("user"), String(""), text);
+  if(base64_buf == NULL){
+    chatHistory.push_back(String("user"), String(""), text);
+  }
+  else{
+    //画像が入力された場合は第2引数を"image"にして識別する
+    chatHistory.push_back(String("user"), String("image"), text);
+  }
 
   // functionの実行が要求されなくなるまで繰り返す
   for (int reqCount = 0; reqCount < MAX_REQUEST_COUNT; reqCount++)
   {
     init_chat_doc(InitBuffer.c_str());
 
-    if(reqCount == (MAX_REQUEST_COUNT - 1)){
-      funcCallMode = String("none");
-    }
+    //if(reqCount == (MAX_REQUEST_COUNT - 1)){
+    //  funcCallMode = String("none");
+    //}
 
     for (int i = 0; i < chatHistory.get_size(); i++)
     {
@@ -202,9 +209,31 @@ void exec_chatGPT(String text) {
       JsonObject systemMessage1 = messages.createNestedObject();
 
       if(chatHistory.get_role(i).equals(String("function"))){
+        //Function Callingの場合
         systemMessage1["role"] = chatHistory.get_role(i);
         systemMessage1["name"] = chatHistory.get_funcName(i);
         systemMessage1["content"] = chatHistory.get_content(i);
+      }
+      else if(chatHistory.get_funcName(i).equals(String("image"))){
+        //画像がある場合
+        //このようなJSONを作成する
+        // messages=[
+        //      {"role": "user", "content": [
+        //          {"type": "text", "text": "この三角形の面積は？"},
+        //          {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+        //      ]}
+        //  ],
+
+        String image_url_str = String("data:image/jpeg;base64,") + String(base64_buf); 
+
+        systemMessage1["role"] = chatHistory.get_role(i);;
+        JsonObject content_text = systemMessage1["content"].createNestedObject();
+        content_text["type"] = "text";
+        content_text["text"] = chatHistory.get_content(i);
+        JsonObject content_image = systemMessage1["content"].createNestedObject();
+        content_image["type"] = "image_url";
+        content_image["image_url"]["url"] = image_url_str.c_str();
+
       }
       else{
         systemMessage1["role"] = chatHistory.get_role(i);

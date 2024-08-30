@@ -23,19 +23,11 @@ void speech(String text)
     while(mp3->isRunning()) {
         if (!mp3->loop()) {
             mp3->stop();
-
             Serial.println("mp3 stop");
             avatar.setExpression(Expression::Neutral);
             delay(200);
             M5.Speaker.end();
             M5.Mic.begin();
-
-#if defined(ENABLE_FACE_DETECT)
-            //if(isSubWindowON){
-            //    avatar.set_isSubWindowEnable(true);
-            //}
-#endif  //ENABLE_FACE_DETECT
-
             servo_home = true;
         }
         delay(1);

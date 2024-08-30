@@ -14,7 +14,7 @@ extern ChatHistory chatHistory;
 
 extern bool init_chat_doc(const char *data);
 extern bool save_json();
-extern void exec_chatGPT(String text);
+extern void exec_chatGPT(String text, const char *base64_buf = NULL);
 
 
 #endif  //_CHAT_GPT_H

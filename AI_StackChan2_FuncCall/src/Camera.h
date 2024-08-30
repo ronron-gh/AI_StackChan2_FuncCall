@@ -21,7 +21,8 @@
 extern bool isSubWindowON;
 extern bool isSilentMode;
 
-extern esp_err_t camera_init();
-extern bool camera_capture_and_face_detect();
+extern esp_err_t camera_init(void);
+extern bool camera_capture_and_face_detect(void);
+extern bool camera_capture_base64(String& out);
 
 #endif //_CAMERA_H_

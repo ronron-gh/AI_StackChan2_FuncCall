@@ -86,12 +86,6 @@ bool playMP3File(const char *filename)
 
           delete file_mp3;
           file_mp3 = nullptr;
-
-    #if defined(ENABLE_FACE_DETECT)
-          //if(isSubWindowON){
-          //  avatar.set_isSubWindowEnable(true);
-          //}
-    #endif  //ENABLE_FACE_DETECT
         }
         delay(1);
       }
