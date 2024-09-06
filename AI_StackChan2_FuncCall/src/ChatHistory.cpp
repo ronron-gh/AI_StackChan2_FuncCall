@@ -38,6 +38,10 @@ String ChatHistory::get_funcName(int i){
   return chatHistory_funcName[i];
 }
 
+void ChatHistory::set_funcName(int i, String name){
+  chatHistory_funcName[i] = name;
+}
+
 String ChatHistory::get_content(int i){
   return chatHistory_content[i];
 }

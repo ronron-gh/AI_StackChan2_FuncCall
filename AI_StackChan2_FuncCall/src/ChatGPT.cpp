@@ -226,7 +226,7 @@ void exec_chatGPT(String text, const char *base64_buf = NULL) {
 
         String image_url_str = String("data:image/jpeg;base64,") + String(base64_buf); 
 
-        systemMessage1["role"] = chatHistory.get_role(i);;
+        systemMessage1["role"] = chatHistory.get_role(i);
         JsonObject content_text = systemMessage1["content"].createNestedObject();
         content_text["type"] = "text";
         content_text["text"] = chatHistory.get_content(i);
@@ -234,6 +234,8 @@ void exec_chatGPT(String text, const char *base64_buf = NULL) {
         content_image["type"] = "image_url";
         content_image["image_url"]["url"] = image_url_str.c_str();
 
+        //次回以降は画像の埋め込みをしないよう、識別用の文字列"image"を消す
+        chatHistory.set_funcName(i, "");
       }
       else{
         systemMessage1["role"] = chatHistory.get_role(i);

@@ -10,9 +10,13 @@ SubWindow::SubWindow() {
   isDrawEnable = false;
   drawingBufIdx = 0;
 
-  LCD_WIDTH = 320;
-  LCD_HEIGHT = 240;
-  RESIZE_RATIO = 3;
+  //LCD_WIDTH = 320;
+  //LCD_HEIGHT = 240;
+  //RESIZE_RATIO = 3;
+
+  LCD_WIDTH = 640;
+  LCD_HEIGHT = 480;
+  RESIZE_RATIO = 6;
 
 //  subWdWidth = 80;    //縮小率1/4
   subWdWidth = 107;    //縮小率1/3

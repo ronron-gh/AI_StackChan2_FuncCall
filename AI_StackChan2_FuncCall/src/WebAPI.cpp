@@ -5,6 +5,7 @@
 #include "ChatGPT.h"
 #include "FunctionCall.h"
 #include "WebVoiceVoxTTS.h"
+#include "Speech.h"
 
 using namespace m5avatar;
 extern Avatar avatar;
@@ -155,8 +156,9 @@ void handle_speech() {
   ////////////////////////////////////////
   // 音声の発声
   ////////////////////////////////////////
-  avatar.setExpression(Expression::Happy);
-  Voicevox_tts((char*)message.c_str(), (char*)TTS_PARMS.c_str());
+  //avatar.setExpression(Expression::Happy);
+  //Voicevox_tts((char*)message.c_str(), (char*)TTS_PARMS.c_str());
+  speech(message);
   server.send(200, "text/plain", String("OK"));
 }
 
@@ -174,23 +176,6 @@ void handle_chat() {
   server.send(200, "text/html", String(HEAD)+String("<body>")+response+String("</body>"));
 }
 
-
-/*
-String Role_JSON = "";
-void exec_chatGPT1(String text) {
-  static String response = "";
-  init_chat_doc(Role_JSON.c_str());
-
-  String role = chat_doc["messages"][0]["role"];
-  if(role == "user") {chat_doc["messages"][0]["content"] = text;}
-  String json_string;
-  serializeJson(chat_doc, json_string);
-
-  response = chatGpt(json_string);
-  speech_text = response;
-//  server.send(200, "text/html", String(HEAD)+String("<body>")+response+String("</body>"));
-}
-*/
 void handle_apikey() {
   // ファイルを読み込み、クライアントに送信する
   server.send(200, "text/html", APIKEY_HTML);

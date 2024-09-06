@@ -39,7 +39,8 @@ static camera_config_t camera_config = {
 
     .pixel_format = PIXFORMAT_RGB565,
     //.pixel_format = PIXFORMAT_JPEG,
-    .frame_size   = FRAMESIZE_QVGA,   // QVGA(320x240)
+    //.frame_size   = FRAMESIZE_QVGA,   // QVGA(320x240)
+    .frame_size   = FRAMESIZE_VGA,   // VGA(640x480)
     .jpeg_quality = 0,
     //.fb_count     = 2,
     .fb_count     = 1,
@@ -205,6 +206,7 @@ bool camera_capture_base64(String& out)
   //acquire a frame
   M5.In_I2C.release();
   camera_fb_t *fb = esp_camera_fb_get();
+
   if (!fb) {
     Serial.println("Camera Capture Failed");
     return false;
@@ -221,7 +223,7 @@ bool camera_capture_base64(String& out)
     return false;
   }
 
-#if 0 //debug
+#if 1 //debug
   File fdst = SPIFFS.open("/capture.jpg", FILE_WRITE);
   if ((ret = fdst.write(jpg_buf, jpg_buf_len)) < jpg_buf_len) {
     Serial.printf("write spiffs failed: %d - %d\n", ret, jpg_buf_len);

@@ -19,6 +19,7 @@ public:
   int get_size();
   String get_role(int i);
   String get_funcName(int i);
+  void set_funcName(int i, String name);
   String get_content(int i);
   void clear();
   void clean_function_role();
