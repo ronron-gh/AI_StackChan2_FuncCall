@@ -1,8 +1,6 @@
 #ifndef _MAIL_CLIENT_H_
 #define _MAIL_CLIENT_H_
 
-#include "ESP_Mail_Client.h"
-//#include "extras/SDHelper.h"  // Provide the SD card interfaces setting and mounting
 #include <deque>
 
 // IMAP

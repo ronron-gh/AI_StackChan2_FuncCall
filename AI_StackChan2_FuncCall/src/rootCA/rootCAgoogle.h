@@ -4,7 +4,7 @@
 // and --END CERTIFICATE--) to root.cert and put here on the root_cert variable.
  // certificate for https://speech.googleapis.com
 // GlobalSign Root CA, valid until Fri Jan 28 2028, size: 1927 bytes 
-const char* root_ca_google = \
+static const char* root_ca_google = \
 "-----BEGIN CERTIFICATE-----\n" \
 "MIIFYjCCBEqgAwIBAgIQd70NbNs2+RrqIQ/E8FjTDTANBgkqhkiG9w0BAQsFADBX\n" \
 "MQswCQYDVQQGEwJCRTEZMBcGA1UEChMQR2xvYmFsU2lnbiBudi1zYTEQMA4GA1UE\n" \

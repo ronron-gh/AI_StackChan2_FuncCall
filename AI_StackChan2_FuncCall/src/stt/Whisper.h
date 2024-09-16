@@ -1,7 +1,7 @@
 #ifndef _Whisper_H
 #define _Whisper_H
 #include <WiFiClientSecure.h>
-#include "AudioWhisper.h"
+#include "driver/AudioWhisper.h"
 
 class Whisper {
   WiFiClientSecure client;

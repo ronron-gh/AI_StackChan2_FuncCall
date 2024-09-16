@@ -7,16 +7,20 @@
 #include <nvs.h>
 #include <Avatar.h>
 #include "StackchanExConfig.h" 
+#include "Robot.h"
+#include "mod/ModManager.h"
+#include "mod/ModBase.h"
+#include "mod/AiStackChan/AiStackChanMod.h"
+#include "mod/StatusMonitor/StatusMonitorMod.h"
+#include "mod/FunctionCallingInfo/FunctionCallingInfoMod.h"
 
-#include "PlayMP3.h"
+#include "driver/PlayMP3.h"   //lipSync
 
 #include <ServoEasing.hpp> // https://github.com/ArminJo/ServoEasing       
-#include "WebVoiceVoxTTS.h"
+//#include "tts/WebVoiceVoxTTS.h"
 
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
-#include "rootCACertificate.h"
-#include "rootCAgoogle.h"
 #include <ArduinoJson.h>
 #include "SpiRamJsonDocument.h"
 //#include <ESP32WebServer.h>
@@ -25,35 +29,30 @@
 #include <ESP8266FtpServer.h>
 
 //#include <deque>
-#include "AudioWhisper.h"
-#include "Whisper.h"
-#include "Audio.h"
-#include "CloudSpeechClient.h"
-#include "Speech.h"
+
 #if defined(ENABLE_WAKEWORD)
 #include "WakeWord.h"
 #include "WakeWordIndex.h"
 #endif
 
-#include "ChatGPT.h"
-#include "FunctionCall.h"
-#include "ChatHistory.h"
+#include "chat/ChatGPT/ChatGPT.h"
+#include "chat/ChatGPT/FunctionCall.h"
+#include "chat/ChatGPT/ChatHistory.h"
 
 #include "WebAPI.h"
 
 #if defined( ENABLE_HEX_LED )
-#include "HexLED.h"
+#include "driver/HexLED.h"
 #endif
 
 #if defined( ENABLE_CAMERA )
-#include <Camera.h>
+#include "driver/Camera.h"
 #endif    //ENABLE_CAMERA
 
 #include "Scheduler.h"
 #include "MySchedule.h"
-#include "WatchDog.h"
+#include "driver/WatchDog.h"
 #include "SDUpdater.h"
-#include "UiManager.h"
 
 #define USE_SDCARD
 #define WIFI_SSID "SET YOUR WIFI SSID"
@@ -64,7 +63,8 @@
 
 
 StackchanExConfig system_config;
-UiBase* current_ui;
+Robot* robot;
+ModBase* current_mod;
 
 #define USE_SERVO
 #ifdef USE_SERVO
@@ -101,11 +101,8 @@ const Expression expressions_table[] = {
 FtpServer ftpSrv;   //set #define FTP_DEBUG in ESP8266FtpServer.h to see ftp verbose on serial
 
 //---------------------------------------------
-//String VOICEVOX_API_KEY = "";
 String STT_API_KEY = "";
-//String TTS_SPEAKER_NO = "3";
-//String TTS_SPEAKER = "&speaker=";
-//String TTS_PARMS = TTS_SPEAKER + TTS_SPEAKER_NO;
+
 
 //---------------------------------------------
 #if defined(ENABLE_WAKEWORD)
@@ -273,35 +270,6 @@ void Wifi_setup() {
   }
 }
 
-String SpeechToText(bool isGoogle){
-  Serial.println("\r\nRecord start!\r\n");
-
-  String ret = "";
-  if( isGoogle) {
-    Audio* audio = new Audio();
-    audio->Record();  
-    Serial.println("Record end\r\n");
-    Serial.println("音声認識開始");
-    avatar.setSpeechText("わかりました");  
-    CloudSpeechClient* cloudSpeechClient = new CloudSpeechClient(root_ca_google, STT_API_KEY.c_str());
-    ret = cloudSpeechClient->Transcribe(audio);
-    delete cloudSpeechClient;
-    delete audio;
-  } else {
-    AudioWhisper* audio = new AudioWhisper();
-    audio->Record();  
-    Serial.println("Record end\r\n");
-    Serial.println("音声認識開始");
-    avatar.setSpeechText("わかりました");  
-    Whisper* cloudSpeechClient = new Whisper(root_ca_openai, OPENAI_API_KEY.c_str());
-    ret = cloudSpeechClient->Transcribe(audio);
-    delete cloudSpeechClient;
-    delete audio;
-  }
-  return ret;
-}
-
-
 void time_sync(const char* ntpsrv, long gmt_offset, int daylight_offset) {
   struct tm timeInfo; 
   char buf[60];
@@ -323,6 +291,18 @@ void time_sync(const char* ntpsrv, long gmt_offset, int daylight_offset) {
   }
 }
 
+
+
+ModBase* init_mod(void)
+{
+  ModBase* mod;
+  add_mod(new AiStackChanMod());
+  add_mod(new StatusMonitorMod());
+  add_mod(new FunctionCallingInfoMod());
+  mod = get_current_mod();
+  mod->init();
+  return mod;
+}
 
 void setup()
 {
@@ -367,42 +347,6 @@ void setup()
   }
   //M5.Speaker.begin();
 
-  {
-    uint32_t nvs_handle;
-    if (ESP_OK == nvs_open("setting", NVS_READONLY, &nvs_handle)) {
-      size_t volume;
-      uint8_t led_onoff;
-      uint8_t speaker_no;
-      nvs_get_u32(nvs_handle, "volume", &volume);
-      if(volume > 255) volume = 255;
-      M5.Speaker.setVolume(volume);
-      M5.Speaker.setChannelVolume(m5spk_virtual_channel, volume);
-      nvs_get_u8(nvs_handle, "led", &led_onoff);
-      // if(led_onoff == 1) Use_LED = true;
-      // else  Use_LED = false;
-      nvs_get_u8(nvs_handle, "speaker", &speaker_no);
-      if(speaker_no > 60) speaker_no = 3;
-      TTS_SPEAKER_NO = String(speaker_no);
-      TTS_PARMS = TTS_SPEAKER + TTS_SPEAKER_NO;
-      nvs_close(nvs_handle);
-    } else {
-      if (ESP_OK == nvs_open("setting", NVS_READWRITE, &nvs_handle)) {
-        size_t volume = 180;
-        uint8_t led_onoff = 0;
-        uint8_t speaker_no = 3;
-        nvs_set_u32(nvs_handle, "volume", volume);
-        nvs_set_u8(nvs_handle, "led", led_onoff);
-        nvs_set_u8(nvs_handle, "speaker", speaker_no);
-        nvs_close(nvs_handle);
-        M5.Speaker.setVolume(volume);
-        M5.Speaker.setChannelVolume(m5spk_virtual_channel, volume);
-        // Use_LED = false;
-        TTS_SPEAKER_NO = String(speaker_no);
-        TTS_PARMS = TTS_SPEAKER + TTS_SPEAKER_NO;
-      }
-    }
-  }
-
   M5.Lcd.setTextSize(2);
   Serial.println("Connecting to WiFi");
   WiFi.disconnect();
@@ -421,6 +365,9 @@ void setup()
     // この関数ですべてのYAMLファイル(Basic, Secret, Extend)を読み込む
     system_config.loadConfig(SD, "/app/AiStackChan2FuncCall/SC_ExConfig.yaml");
 
+    robot = new Robot(system_config);
+    // TODO 以降の設定をRobotに集約していく
+
 #ifdef USE_SERVO
     // Servo
     SERVO_PIN_X = system_config.getServoInfo(AXIS_X)->pin;
@@ -437,62 +384,21 @@ void setup()
     WiFi.begin(wifi_info->ssid.c_str(), wifi_info->password.c_str());
 
     /// API key
-    uint32_t nvs_handle;
-    if (ESP_OK == nvs_open("apikey", NVS_READWRITE, &nvs_handle)) {
-      api_keys_s* api_key = system_config.getAPISetting();
-
-      nvs_set_str(nvs_handle, "openai", api_key->ai_service.c_str());
-      Serial.printf("openai: %s\n",api_key->ai_service.c_str());
-
-      nvs_set_str(nvs_handle, "voicevox", api_key->tts.c_str());
-      Serial.printf("voicevox: %s\n",api_key->tts.c_str());
-
-      nvs_set_str(nvs_handle, "sttapikey", api_key->stt.c_str());
-      Serial.printf("stt: %s\n",api_key->stt.c_str());
-
-      nvs_close(nvs_handle);
-    }
+    api_keys_s* api_key = system_config.getAPISetting();
+    OPENAI_API_KEY = api_key->ai_service;
+    //VOICEVOX_API_KEY = api_key->tts;
+    STT_API_KEY = api_key->stt;
 
     // Function Call関連の設定
     init_func_call_settings(&system_config);
 
     //SD.end();
   } else {
+    M5.Lcd.print("Failed to load SD card settings");
     WiFi.begin();
   }
-
-  {
-    uint32_t nvs_handle;
-    if (ESP_OK == nvs_open("apikey", NVS_READONLY, &nvs_handle)) {
-      Serial.println("nvs_open");
-
-      size_t length1;
-      size_t length2;
-      size_t length3;
-      if(ESP_OK == nvs_get_str(nvs_handle, "openai", nullptr, &length1) && 
-         ESP_OK == nvs_get_str(nvs_handle, "voicevox", nullptr, &length2) && 
-         ESP_OK == nvs_get_str(nvs_handle, "sttapikey", nullptr, &length3) && 
-        length1 && length2 && length3) {
-        Serial.println("nvs_get_str");
-        char openai_apikey[length1 + 1];
-        char voicevox_apikey[length2 + 1];
-        char stt_apikey[length3 + 1];
-        if(ESP_OK == nvs_get_str(nvs_handle, "openai", openai_apikey, &length1) && 
-           ESP_OK == nvs_get_str(nvs_handle, "voicevox", voicevox_apikey, &length2) &&
-           ESP_OK == nvs_get_str(nvs_handle, "sttapikey", stt_apikey, &length3)) {
-          OPENAI_API_KEY = String(openai_apikey);
-          VOICEVOX_API_KEY = String(voicevox_apikey);
-          STT_API_KEY = String(stt_apikey);
-          // Serial.println(OPENAI_API_KEY);
-          // Serial.println(VOICEVOX_API_KEY);
-          // Serial.println(STT_API_KEY);
-        }
-      }
-      nvs_close(nvs_handle);
-    }
-  }
   
-#endif
+#endif  //USE_SDCARD
 
   M5.Lcd.print("Connecting");
   Wifi_setup();
@@ -581,9 +487,7 @@ void setup()
   avatar.addTask(servo, "servo");
   avatar.setSpeechFont(&fonts::efontJA_16);
 
-//  M5.Speaker.setVolume(200);
-
-  current_ui = init_ui();
+  M5.Speaker.setVolume(180);
 
   //時刻同期
   time_sync(NTPSRV, GMT_OFFSET, DAYLIGHT_OFFSET);
@@ -605,59 +509,16 @@ void setup()
   init_schedule();
   //init_watchdog();
 
+  //mod設定
+  current_mod = init_mod();
+
+
   //ヒープメモリ残量確認(デバッグ用)
   check_heap_free_size();
   check_heap_largest_free_block();
 
 }
 
-
-String random_words[18] = {"あなたは誰","楽しい","怒った","可愛い","悲しい","眠い","ジョークを言って","泣きたい","怒ったぞ","こんにちは","お疲れ様","詩を書いて","疲れた","お腹空いた","嫌いだ","苦しい","俳句を作って","歌をうたって"};
-int random_time = -1;
-bool random_speak = true;
-int lastms1 = 0;
-
-void report_batt_level(){
-  char buff[100];
-  int level = M5.Power.getBatteryLevel();
-#if defined(ENABLE_WAKEWORD)
-  mode = 0;
-#endif
-  if(M5.Power.isCharging())
-    sprintf(buff,"充電中、バッテリーのレベルは%d％です。",level);
-  else
-    sprintf(buff,"バッテリーのレベルは%d％です。",level);
-  avatar.setExpression(Expression::Happy);
-#if defined(ENABLE_WAKEWORD)
-  mode = 0; 
-#endif
-  speech(String(buff));
-  delay(1000);
-  avatar.setExpression(Expression::Neutral);
-}
-
-void switch_monologue_mode(){
-    String tmp;
-#if defined(ENABLE_WAKEWORD)
-    mode = 0;
-#endif
-    if(random_speak) {
-      tmp = "独り言始めます。";
-      lastms1 = millis();
-      random_time = 40000 + 1000 * random(30);
-    } else {
-      tmp = "独り言やめます。";
-      random_time = -1;
-    }
-    random_speak = !random_speak;
-    avatar.setExpression(Expression::Happy);
-#if defined(ENABLE_WAKEWORD)
-    mode = 0;
-#endif
-    speech(tmp);
-    delay(1000);
-    avatar.setExpression(Expression::Neutral);
-}
 
 void sw_tone(){
 #if 1
@@ -669,82 +530,25 @@ void sw_tone(){
 #endif
 }
 
-void STT_ChatGPT(const char *base64_buf = NULL) {
-  bool prev_servo_home = servo_home;
-  random_speak = true;
-  random_time = -1;
-#ifdef USE_SERVO
-  servo_home = true;
-#endif
-
-#if defined( ENABLE_HEX_LED )
-          hex_led_ptn_wake();
-#endif
-
-  avatar.setExpression(Expression::Happy);
-  avatar.setSpeechText("御用でしょうか？");
-  String ret;
-  if(OPENAI_API_KEY != STT_API_KEY){
-    Serial.println("Google STT");
-    ret = SpeechToText(true);
-  } else {
-    Serial.println("Whisper STT");
-    ret = SpeechToText(false);
-  }
-#ifdef USE_SERVO
-  //servo_home = prev_servo_home;
-  servo_home = false;
-#endif
-  Serial.println("音声認識終了");
-  Serial.println("音声認識結果");
-  if(ret != "") {
-    Serial.println(ret);
-
-#if defined( ENABLE_HEX_LED )
-    hex_led_ptn_accept();
-#endif
-    exec_chatGPT(ret, base64_buf);
-    avatar.setSpeechText("");
-    avatar.setExpression(Expression::Neutral);
-    servo_home = true;
-#if defined(ENABLE_WAKEWORD)
-    mode = 0;
-#endif
-
-  } else {
-#if defined( ENABLE_HEX_LED )
-    hex_led_ptn_off();
-#endif
-    Serial.println("音声認識失敗");
-    avatar.setExpression(Expression::Sad);
-    avatar.setSpeechText("聞き取れませんでした");
-    delay(2000);
-    avatar.setSpeechText("");
-    avatar.setExpression(Expression::Neutral);
-    servo_home = true;
-  } 
-}
-
-
 void loop()
 {
 
   M5.update();
-  current_ui = get_current_ui();
+  current_mod = get_current_mod();
 
   if (M5.BtnA.wasPressed())
   {
-    current_ui->btnA_pressed();
+    current_mod->btnA_pressed();
   }
 
   if (M5.BtnB.pressedFor(2000))
   {
-    current_ui->btnB_longPressed();
+    current_mod->btnB_longPressed();
   }
 
   if (M5.BtnC.wasPressed())
   {
-    current_ui->btnC_pressed();
+    current_mod->btnC_pressed();
   }
 
 
@@ -755,7 +559,7 @@ void loop()
     auto t = M5.Touch.getDetail();
     if (t.wasPressed())
     {
-      current_ui->display_touched(t.x, t.y);
+      current_mod->display_touched(t.x, t.y);
     }
   }
 #endif
@@ -774,7 +578,7 @@ void loop()
   run_schedule();
   //reset_watchdog();
 
-  current_ui->idle();
+  current_mod->idle();
   
 }
 

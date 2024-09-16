@@ -1,14 +1,15 @@
 #include "FunctionCall.h"
 #include <Avatar.h>
+#include "Robot.h"
 #include <AudioGeneratorMP3.h>
-#include "AudioOutputM5Speaker.h"
+#include "driver/AudioOutputM5Speaker.h"
 #include <HTTPClient.h>
 #include <SD.h>
 #include <EMailSender.h>
 #include "MailClient.h"
-#include "HexLED.h"
+#include "driver/HexLED.h"
 #include "WakeWord.h"
-#include "Speech.h"
+#include "Robot.h"
 #include "Scheduler.h"
 #include "StackchanExConfig.h" 
 #include "SDUtil.h"
@@ -421,16 +422,16 @@ String ask(const char* text){
   servo_home = true;
 //#endif
   avatar.setExpression(Expression::Happy);
-  speech(String(text));
+  robot->speech(String(text));
   sw_tone();
   avatar.setSpeechText("どうぞ話してください");
   String ret;
   if(OPENAI_API_KEY != STT_API_KEY){
     Serial.println("Google STT");
-    ret = SpeechToText(true);
+    ret = robot->listen(true);
   } else {
     Serial.println("Whisper STT");
-    ret = SpeechToText(false);
+    ret = robot->listen(false);
   }
 
 //#ifdef USE_SERVO

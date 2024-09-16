@@ -1,79 +1,40 @@
 #include <Arduino.h>
 #include <deque>
 #include <SPIFFS.h>
-#include "UiManager.h"
+#include "mod/ModManager.h"
+#include "AiStackChanMod.h"
 #include <Avatar.h>
+#include "Robot.h"
 #include "WakeWord.h"
-#include "ChatGPT.h"
-#include "Speech.h"
-#include "PlayMP3.h"
+#include "chat/ChatGPT/ChatGPT.h"
+#include "chat/ChatGPT/FunctionCall.h"
+#include "driver/PlayMP3.h"
 #include <WiFiClientSecure.h>
 #include "Scheduler.h"
-#include "FunctionCall.h"
 #if defined( ENABLE_CAMERA )
-#include <Camera.h>
+#include "driver/Camera.h"
 #endif
+#include "driver/HexLED.h"
+#include "driver/AudioWhisper.h"       //speechToText
+#include "stt/Whisper.h"               //speechToText
+#include "driver/Audio.h"              //speechToText
+#include "stt/CloudSpeechClient.h"     //speechToText
+#include "rootCA/rootCACertificate.h"  //speechToText
+#include "rootCA/rootCAgoogle.h"       //speechToText
+#include "driver/Audio.h"              //speechToText
+
 
 using namespace m5avatar;
 
 
 /// 外部参照 ///
 extern Avatar avatar;
+extern bool servo_home;
 extern bool wakeword_is_enable;
-extern int random_time;
-extern bool random_speak;
 extern void sw_tone();
-extern void report_batt_level();
-extern void STT_ChatGPT(const char *base64_buf = nullptr);
-extern void switch_monologue_mode();
-
-extern String random_words[];
-extern int random_time;
-extern bool random_speak;
-extern int lastms1;
-
+extern String OPENAI_API_KEY;   // TODO  Robotに隠蔽したい
+extern String STT_API_KEY;      // TODO  Robotに隠蔽したい
 ///////////////
-
-
-std::deque<UiBase*> uiList;
-//UiBase* uiList[MAX_UI_NUM] = {nullptr};
-//UiBase *current_ui;
-
-
-void add_ui(UiBase* ui)
-{
-  uiList.push_back(ui);
-}
-
-UiBase* change_ui(void)
-{
-  UiBase* ui;
-  ui = uiList[0];
-  uiList.pop_front();
-  uiList.push_back(ui);
-  ui = uiList[0];
-  ui->init();
-  return ui;
-}
-
-UiBase* get_current_ui(void)
-{
-  return uiList[0];
-}
-
-UiBase* init_ui(void)
-{
-  UiBase* ui;
-  add_ui(new UiAvatar());
-  add_ui(new UiStatus());
-  add_ui(new UiFuncCallInfo());
-  ui = get_current_ui();
-  ui->init();
-  return ui;
-}
-
-
-
 
 static bool g_avatar_status = true;
 static void avatar_stop()
@@ -98,32 +59,114 @@ static void avatar_resume()
   delay(100);
 }
 
-static void init_info_disp()
-{
-  //M5.Display.setTextFont(0);
-  M5.Display.setFont(&fonts::lgfxJapanGothic_20);
-  M5.Display.setTextSize(1);
-  M5.Display.setTextColor(WHITE, BLACK);
-  M5.Display.setTextDatum(0);
-  M5.Display.setCursor(0, 0);
-  M5.Display.fillScreen(BLACK);
-  
-  delay(100);
+
+String random_words[18] = {"あなたは誰","楽しい","怒った","可愛い","悲しい","眠い","ジョークを言って","泣きたい","怒ったぞ","こんにちは","お疲れ様","詩を書いて","疲れた","お腹空いた","嫌いだ","苦しい","俳句を作って","歌をうたって"};
+int random_time = -1;
+bool random_speak = true;
+int lastms1 = 0;
+
+static void report_batt_level(){
+  char buff[100];
+  int level = M5.Power.getBatteryLevel();
+#if defined(ENABLE_WAKEWORD)
+  mode = 0;
+#endif
+  if(M5.Power.isCharging())
+    sprintf(buff,"充電中、バッテリーのレベルは%d％です。",level);
+  else
+    sprintf(buff,"バッテリーのレベルは%d％です。",level);
+  avatar.setExpression(Expression::Happy);
+#if defined(ENABLE_WAKEWORD)
+  mode = 0; 
+#endif
+  robot->speech(String(buff));
+  delay(1000);
+  avatar.setExpression(Expression::Neutral);
+}
+
+static void switch_monologue_mode(){
+    String tmp;
+#if defined(ENABLE_WAKEWORD)
+    mode = 0;
+#endif
+    if(random_speak) {
+      tmp = "独り言始めます。";
+      lastms1 = millis();
+      random_time = 40000 + 1000 * random(30);
+    } else {
+      tmp = "独り言やめます。";
+      random_time = -1;
+    }
+    random_speak = !random_speak;
+    avatar.setExpression(Expression::Happy);
+#if defined(ENABLE_WAKEWORD)
+    mode = 0;
+#endif
+    robot->speech(tmp);
+    delay(1000);
+    avatar.setExpression(Expression::Neutral);
 }
 
 
-UiBase::UiBase(void){};
-void UiBase::init(void){};
-void UiBase::btnA_pressed(void){};
-void UiBase::btnA_longPressed(void){};
-void UiBase::btnB_pressed(void){};
-void UiBase::btnB_longPressed(void){};
-void UiBase::btnC_pressed(void){};
-void UiBase::btnC_longPressed(void){};
-void UiBase::display_touched(int16_t x, int16_t y){};
-void UiBase::idle(void){};
+static void STT_ChatGPT(const char *base64_buf = NULL) {
+  bool prev_servo_home = servo_home;
+  random_speak = true;
+  random_time = -1;
+#ifdef USE_SERVO
+  servo_home = true;
+#endif
 
-UiAvatar::UiAvatar(void)
+#if defined( ENABLE_HEX_LED )
+          hex_led_ptn_wake();
+#endif
+
+  avatar.setExpression(Expression::Happy);
+  avatar.setSpeechText("御用でしょうか？");
+  String ret;
+  if(OPENAI_API_KEY != STT_API_KEY){
+    Serial.println("Google STT");
+    ret = robot->listen(true);
+  } else {
+    Serial.println("Whisper STT");
+    ret = robot->listen(false);
+  }
+#ifdef USE_SERVO
+  //servo_home = prev_servo_home;
+  servo_home = false;
+#endif
+  Serial.println("音声認識終了");
+  Serial.println("音声認識結果");
+  if(ret != "") {
+    Serial.println(ret);
+
+#if defined( ENABLE_HEX_LED )
+    hex_led_ptn_accept();
+#endif
+    exec_chatGPT(ret, base64_buf);
+    avatar.setSpeechText("");
+    avatar.setExpression(Expression::Neutral);
+    servo_home = true;
+#if defined(ENABLE_WAKEWORD)
+    mode = 0;
+#endif
+
+  } else {
+#if defined( ENABLE_HEX_LED )
+    hex_led_ptn_off();
+#endif
+    Serial.println("音声認識失敗");
+    avatar.setExpression(Expression::Sad);
+    avatar.setSpeechText("聞き取れませんでした");
+    delay(2000);
+    avatar.setSpeechText("");
+    avatar.setExpression(Expression::Neutral);
+    servo_home = true;
+  } 
+}
+
+
+
+AiStackChanMod::AiStackChanMod(void)
 {
   box_servo.setupBox(80, 120, 80, 80);
 #if defined(ENABLE_CAMERA)
@@ -136,18 +179,22 @@ UiAvatar::UiAvatar(void)
   box_BtnC.setupBox(280, 100, 40, 60);
 }
 
-void UiAvatar::init(void)
+void AiStackChanMod::init(void)
 {
   avatar_resume();
 }
 
+void AiStackChanMod::pause(void)
+{
+  avatar_stop();
+}
 
-void UiAvatar::update(int page_no)
+void AiStackChanMod::update(int page_no)
 {
 
 }
 
-void UiAvatar::btnA_pressed(void)
+void AiStackChanMod::btnA_pressed(void)
 {
 #if defined(ENABLE_WAKEWORD)
   if(mode >= 0){
@@ -168,7 +215,7 @@ void UiAvatar::btnA_pressed(void)
 }
 
 
-void UiAvatar::btnB_longPressed(void)
+void AiStackChanMod::btnB_longPressed(void)
 {
 #if defined(ENABLE_WAKEWORD)
   M5.Mic.end();
@@ -190,13 +237,13 @@ void UiAvatar::btnB_longPressed(void)
 #endif
 }
 
-void UiAvatar::btnC_pressed(void)
+void AiStackChanMod::btnC_pressed(void)
 {
   sw_tone();
   report_batt_level();
 }
 
-void UiAvatar::display_touched(int16_t x, int16_t y)
+void AiStackChanMod::display_touched(int16_t x, int16_t y)
 {
   if (box_stt.contain(x, y)/*&&(!mp3->isRunning())*/)
   {
@@ -243,7 +290,7 @@ void UiAvatar::display_touched(int16_t x, int16_t y)
   if (box_BtnC.contain(x, y))
   {
     //sw_tone();
-    change_ui();
+    change_mod();
   }
 #if defined(ENABLE_CAMERA)
   if (box_subWindow.contain(x, y))
@@ -255,7 +302,7 @@ void UiAvatar::display_touched(int16_t x, int16_t y)
 
 }
 
-void UiAvatar::idle(void)
+void AiStackChanMod::idle(void)
 {
 
   /// Face detect ///
@@ -376,141 +423,13 @@ void UiAvatar::idle(void)
     }
     else{
       playMP3File("/alarm.mp3");
-      speech("時間になりました。");
+      robot->speech("時間になりました。");
     }
+#if defined(ENABLE_CAMERA)
     avatar.set_isSubWindowEnable(isSubWindowON);
+#endif  
   }
 
 }
 
-UiStatus::UiStatus(void)
-{
-  box_BtnA.setupBox(0, 100, 40, 60);
-  box_BtnC.setupBox(280, 100, 40, 60);
-}
 
-void UiStatus::init(void)
-{
-  avatar_stop();
-  update(0);
-}
-
-void UiStatus::update(int page_no)
-{
-  String str = "";
-  char tmp[256];
-
-  init_info_disp();
-
-  str += "======== System status ========\n";
-  sprintf(tmp, "Wifi:\n  IP addr:%s\n",
-                  WiFi.localIP().toString().c_str() );
-  str += tmp;
-  sprintf(tmp, "Heap largest free block:\n  DMA:%d\n  SPIRAM:%d\n",
-                  heap_caps_get_largest_free_block(MALLOC_CAP_DMA),
-                  heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) );
-  str += tmp;
-  sprintf(tmp, "Prompt buffer usage:\n  %d / %d [byte]\n",
-                  chat_doc.memoryUsage(),
-                  chat_doc.capacity() );
-  str += tmp;
-  sprintf(tmp, "Battery level:  %d %%\n", M5.Power.getBatteryLevel());
-  str += tmp;
-  M5.Display.print(str);
-}
-
-void UiStatus::display_touched(int16_t x, int16_t y)
-{
-
-  if (box_BtnA.contain(x, y))
-  {
-
-  }
-
-  if (box_BtnC.contain(x, y))
-  {
-    //sw_tone();
-    change_ui();
-  }
-
-
-}
-
-
-
-
-UiFuncCallInfo::UiFuncCallInfo(void)
-{
-  box_BtnA.setupBox(0, 100, 40, 60);
-  box_BtnC.setupBox(280, 100, 40, 60);
-  box_BtnUA.setupBox(0, 0, 80, 60);
-  box_BtnUC.setupBox(240, 0, 80, 60);
-
-  current_page_no = 0;
-}
-
-void UiFuncCallInfo::init(void)
-{
-  avatar_stop();
-  update(current_page_no);
-}
-
-void UiFuncCallInfo::update(int page_no)
-{
-  String str = "";
-  char tmp[256];
-
-  init_info_disp();
-
-  str += "<- prev                 next ->\n";
-  str += "===== Function call info  =====\n";
-  if(page_no == 0){
-    str += "Reminder:\n";
-    for(int i=0; i<MAX_SCHED_NUM; i++){
-      ScheduleBase *sched = get_schedule(i);
-      if(sched != nullptr){
-          if (sched->get_sched_type() == SCHED_REMINDER) {  
-              ScheduleReminder *sched_rem = (ScheduleReminder*)sched;
-              str += " " + sched_rem->get_time_string() + " " + sched_rem->get_remind_string() + "\n";
-          }
-      }
-    }
-  }
-  else if(page_no == 1){
-    str += "Memo:\n";
-    str += note;
-  }
-
-  M5.Display.print(str);
-
-}
-
-void UiFuncCallInfo::display_touched(int16_t x, int16_t y)
-{
-
-  if (box_BtnA.contain(x, y))
-  {
-
-  }
-
-  if (box_BtnC.contain(x, y))
-  {
-    //sw_tone();
-    change_ui();
-  }
-
-  if (box_BtnUA.contain(x, y))
-  {
-    current_page_no--;
-    if(current_page_no < 0) current_page_no = MAX_PAGE_NO - 1;
-    update(current_page_no);
-  }
-
-  if (box_BtnUC.contain(x, y))
-  {
-    current_page_no++;
-    if(current_page_no >= MAX_PAGE_NO) current_page_no = 0;
-    update(current_page_no);
-  }
-
-}

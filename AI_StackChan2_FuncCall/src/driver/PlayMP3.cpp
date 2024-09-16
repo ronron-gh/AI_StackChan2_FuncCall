@@ -22,14 +22,13 @@ extern bool servo_home;
 uint8_t m5spk_virtual_channel = 0;
 
 AudioOutputM5Speaker out(&M5.Speaker, m5spk_virtual_channel);
-//AudioOutputM5Speaker *out;
 AudioGeneratorMP3 *mp3;
-AudioFileSourceBuffer *buff = nullptr;
+
 int preallocateBufferSize = 30*1024;
 uint8_t *preallocateBuffer;
-AudioFileSourceHTTPSStream *file = nullptr;
-//AudioFileSourceSD *file_mp3 = nullptr;
-AudioFileSourceSPIFFS *file_mp3 = nullptr;
+
+
+
 
 void mp3_init(void)
 {
@@ -45,7 +44,25 @@ void mp3_init(void)
 }
 
 void playMP3(AudioFileSourceBuffer *buff){
+
+
+  M5.Mic.end();
+  M5.Speaker.begin();
+
   mp3->begin(buff, &out);
+  
+  while(mp3->isRunning()) {
+    if (!mp3->loop()) {
+      mp3->stop();
+      Serial.println("mp3 stop");
+    }
+    delay(1);
+  }
+
+  delay(200);
+  M5.Speaker.end();
+  M5.Mic.begin();
+
 }
 
 bool playMP3File(const char *filename)
@@ -54,7 +71,8 @@ bool playMP3File(const char *filename)
 
   if (SPIFFS.exists(filename)) {
 
-    file_mp3 = new AudioFileSourceSPIFFS(filename);
+    //AudioFileSourceSD *file_mp3 = new AudioFileSourceSD(filename);
+    AudioFileSourceSPIFFS *file_mp3 = new AudioFileSourceSPIFFS(filename);
     Serial.println("Open mp3");
     
     if( !file_mp3->isOpen() ){
@@ -64,6 +82,8 @@ bool playMP3File(const char *filename)
       result = false;
     }
     else{
+
+/////// AudioFileSourceBufferを経由してPlayMP3()を呼べばよいかも //////////////      
       avatar.setExpression(Expression::Happy);
       M5.Mic.end();
       M5.Speaker.begin();
@@ -76,8 +96,8 @@ bool playMP3File(const char *filename)
       while(mp3->isRunning()) {
         if (!mp3->loop()) {
           mp3->stop();
-          if(file != nullptr){delete file; file = nullptr;}
-          if(buff != nullptr){delete buff; buff = nullptr;}
+          //if(file != nullptr){delete file; file = nullptr;}
+          //if(buff != nullptr){delete buff; buff = nullptr;}
           Serial.println("mp3 stop");
           avatar.setExpression(Expression::Neutral);
           delay(200);
@@ -90,10 +110,13 @@ bool playMP3File(const char *filename)
         delay(1);
       }
       servo_home = true;
+/////////////////////////////////
+
       result = true;
+
     }
   }else{
-    Serial.println("failed to open mp3 file");
+    Serial.println("mp3 file is not exist");
     result = false;
   }
   return result;

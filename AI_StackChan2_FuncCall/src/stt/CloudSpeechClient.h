@@ -1,7 +1,7 @@
 #ifndef _CLOUDSPEECHCLIENT_H
 #define _CLOUDSPEECHCLIENT_H
 #include <WiFiClientSecure.h>
-#include "Audio.h"
+#include "driver/Audio.h"
 
 enum Authentication {
   USE_ACCESSTOKEN,

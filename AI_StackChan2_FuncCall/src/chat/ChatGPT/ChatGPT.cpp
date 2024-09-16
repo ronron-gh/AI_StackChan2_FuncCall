@@ -4,19 +4,19 @@
 #include <Avatar.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
-//#include "rootCACertificate.h"
+#include "rootCA/rootCACertificate.h"
 #include <ArduinoJson.h>
 #include "SpiRamJsonDocument.h"
 #include "ChatHistory.h"
 #include "FunctionCall.h"
-#include "HexLED.h"
-#include "Speech.h"
+#include "driver/HexLED.h"
+#include "Robot.h"
 
 using namespace m5avatar;
 extern Avatar avatar;
-extern String speech_text;
-extern String speech_text_buffer;
-extern const char* root_ca_openai;
+//extern String speech_text;
+//extern String speech_text_buffer;
+//extern const char* root_ca_openai;
 
 String OPENAI_API_KEY = "";
 
@@ -28,7 +28,6 @@ const int MAX_HISTORY = 20;
 ChatHistory chatHistory(MAX_HISTORY);
 
 //DynamicJsonDocument chat_doc(1024*10);
-//DynamicJsonDocument chat_doc(1024*30);
 SpiRamJsonDocument chat_doc(0);     // PSRAMから確保するように変更。サイズの確保はsetup()で実施（初期化後でないとPSRAMが使えないため）。
 
 // ChatGPTのJSONのテンプレートはFunctionCall.cppで定義
@@ -257,7 +256,7 @@ void exec_chatGPT(String text, const char *base64_buf = NULL) {
 
     if(calledFunc == ""){   // Function Callなし ／ Function Call繰り返しの完了
       chatHistory.push_back(String("assistant"), String(""), response);   // 返答をチャット履歴に追加
-      speech(response);
+      robot->speech(response);
       break;
     }
     else{   // Function Call繰り返し中。ループを継続

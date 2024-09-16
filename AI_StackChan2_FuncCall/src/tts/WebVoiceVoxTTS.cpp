@@ -1,17 +1,18 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
-#include "WebVoiceVoxRootCA.h"
+#include "rootCA/WebVoiceVoxRootCA.h"
+#include "WebVoiceVoxTTS.h"
 #include "SpiRamJsonDocument.h"
-#include "PlayMP3.h"
+#include "driver/PlayMP3.h"
 
-String VOICEVOX_API_KEY = "";
-String TTS_SPEAKER_NO = "3";
-String TTS_SPEAKER = "&speaker=";
-String TTS_PARMS = TTS_SPEAKER + TTS_SPEAKER_NO;
+//String VOICEVOX_API_KEY = "";
+//String TTS_SPEAKER_NO = "3";
+//String TTS_SPEAKER = "&speaker=";
+//String TTS_PARMS = TTS_SPEAKER + TTS_SPEAKER_NO;
 
 
-String https_get(const char* url, const char* root_ca) {
+String WebVoiceVoxTTS::https_get(const char* url, const char* root_ca) {
   String payload = "";
   WiFiClientSecure *client = new WiFiClientSecure;
   if(client) {
@@ -53,53 +54,7 @@ String https_get(const char* url, const char* root_ca) {
   return payload;
 }
 
-/* //https_post_json(const char* url, const char* json_string, root_ca_openai);
-String https_post_json(const char* url, const char* json_string, const char* root_ca) {
-  String payload = "";
-  WiFiClientSecure *client = new WiFiClientSecure;
-  if(client) {
-    client -> setCACert(root_ca);
-    {
-      // Add a scoping block for HTTPClient https to make sure it is destroyed before WiFiClientSecure *client is 
-      HTTPClient https;
-      https.setTimeout( 25000 ); 
-  
-      Serial.print("[HTTPS] begin...\n");
-      if (https.begin(*client, url)) {  // HTTPS
-        Serial.print("[HTTPS] POST...\n");
-        // start connection and send HTTP header
-        //https.setTimeout( 10000 ); 
-        https.addHeader("Content-Type", "application/json");
-        https.addHeader("Authorization", "Bearer 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");
-        //int httpCode = https.GET();
-        int httpCode = https.POST((uint8_t *)json_string, strlen(json_string));
-  
-        // httpCode will be negative on error
-        if (httpCode > 0) {
-          // HTTP header has been send and Server response header has been handled
-          Serial.printf("[HTTPS] POST... code: %d\n", httpCode);
-  
-          // file found at server
-          if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
-            payload = https.getString();
-          }
-        } else {
-          Serial.printf("[HTTPS] POST... failed, error: %s\n", https.errorToString(httpCode).c_str());
-        }  
-        https.end();
-      } else {
-        Serial.printf("[HTTPS] Unable to connect\n");
-      }
-      // End extra scoping block
-    }  
-    delete client;
-  } else {
-    Serial.println("Unable to create client");
-  }
-  return payload;
-}
- */
-bool voicevox_tts_json_status(const char* url, const char* json_key, const char* root_ca) {
+bool WebVoiceVoxTTS::voicevox_tts_json_status(const char* url, const char* json_key, const char* root_ca) {
   bool json_data = false;
   DynamicJsonDocument doc(1000);
   String payload = https_get(url, root_ca);
@@ -120,7 +75,7 @@ bool voicevox_tts_json_status(const char* url, const char* json_key, const char*
 }
 
 //String tts_status_url;
-String voicevox_tts_url(const char* url, const char* root_ca) {
+String WebVoiceVoxTTS::voicevox_tts_url(const char* url, const char* root_ca) {
   String tts_url = "";
   WiFiClientSecure *client = new WiFiClientSecure;
   if(client) {
@@ -189,7 +144,7 @@ String voicevox_tts_url(const char* url, const char* root_ca) {
   return tts_url;
 }
 
-static String URLEncode(const char* msg) {
+String WebVoiceVoxTTS::URLEncode(const char* msg) {
   const char *hex = "0123456789ABCDEF";
   String encodedMsg = "";
 
@@ -209,19 +164,12 @@ static String URLEncode(const char* msg) {
   return encodedMsg;
 }
 
-// char *text0 = "みなさん、こんにちは！私の名前はスタックチャンです。よろしくね！";
-// char *tts_parms0 = "&speaker=1";
-// char *tts_parms01 = "&speaker=19";
-// char *tts_parms02 = "&speaker=28";
-// char *tts_parms03 = "&speaker=42";
-// char *tts_parms04 = "&speaker=12";
-// char *tts_parms05 = "&speaker=45";
-// char *tts_parms06 = "&speaker=3";
 
-void Voicevox_tts(char *text,char *tts_parms){
-//  String tts_url = String("https://api.tts.quest/v1/voicevox/?text=") +  URLEncode(text) + String(tts_parms);
-//  String tts_url = String("https://api.tts.quest/v3/voicevox/synthesis?key=y958S773N4I7356&text=") +  URLEncode(text) + String(tts_parms);
-  String tts_url = String("https://api.tts.quest/v3/voicevox/synthesis?key=")+ VOICEVOX_API_KEY +  String("&text=") +  URLEncode(text) + String(tts_parms);
+
+void WebVoiceVoxTTS::stream(String text){
+  String tts_url = String("https://api.tts.quest/v3/voicevox/synthesis?key=")+ param.api_key
+                    + String("&text=") +  URLEncode(text.c_str())
+                    + String("&speaker=") + param.voice;
   String URL = voicevox_tts_url(tts_url.c_str(), root_ca);
   Serial.println(tts_url);
 
@@ -231,9 +179,11 @@ void Voicevox_tts(char *text,char *tts_parms){
   }
 //  while(!voicevox_tts_json_status(tts_status_url.c_str(), "isAudioReady", root_ca)) delay(1);
 //delay(2500);
-  file = new AudioFileSourceHTTPSStream(URL.c_str(), root_ca);
+  AudioFileSourceHTTPSStream *stream = new AudioFileSourceHTTPSStream(URL.c_str(), root_ca);
 //  file->RegisterStatusCB(StatusCallback, (void*)"file");
-  buff = new AudioFileSourceBuffer(file, preallocateBuffer, preallocateBufferSize);
-//  mp3->begin(buff, &out);
+  AudioFileSourceBuffer *buff = new AudioFileSourceBuffer(stream, preallocateBuffer, preallocateBufferSize);
+
   playMP3(buff);
+  delete stream;
+  delete buff;
 }

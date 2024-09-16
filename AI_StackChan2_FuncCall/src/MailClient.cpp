@@ -1,3 +1,5 @@
+#include "ESP_Mail_Client.h"
+//#include "extras/SDHelper.h"  // Provide the SD card interfaces setting and mounting
 #include "MailClient.h"
 
 String authMailAdr = "";    // "XXXXXXXX@gmail.com"

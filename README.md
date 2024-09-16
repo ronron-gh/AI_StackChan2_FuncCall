@@ -12,10 +12,11 @@ OpenAIのFunction Callingを使って、robo8080さんの[AIｽﾀｯｸﾁｬ�
 - [各種設定ファイル（SDカード）](#各種設定ファイルsdカード)
   - [■Wi-Fi設定、APIキー（必須）](#wi-fi設定apiキー必須)
   - [■基本設定（必須）](#基本設定必須)
-  - [■Function Calling用設定（任意）](#function-calling用設定任意)
-    - [●メール送受信用のGmailアカウント、アプリパスワード](#メール送受信用のgmailアカウントアプリパスワード)
-    - [●天気予報のCity ID](#天気予報のcity-id)
-    - [●NewsAPIのAPIキー](#newsapiのapiキー)
+  - [■その他、アプリケーション用設定](#その他アプリケーション用設定)
+    - [●TTSの設定（必須）](#ttsの設定必須)
+    - [●メール送受信用のGmailアカウント、アプリパスワード（任意）](#メール送受信用のgmailアカウントアプリパスワード任意)
+    - [●天気予報のCity ID（任意）](#天気予報のcity-id任意)
+    - [●NewsAPIのAPIキー（任意）](#newsapiのapiキー任意)
   - [■Function Calling用のデータファイル（任意）](#function-calling用のデータファイル任意)
     - [●バス（電車）の時刻表](#バス電車の時刻表)
     - [●アラーム音のMP3](#アラーム音のmp3)
@@ -91,7 +92,8 @@ String json_ChatString =
 
 ### ■Wi-Fi設定、APIキー（必須）
 以下の通り、YAMLファイルでWi-FiとAPIキーの設定をします。  
-※APIキーはｽﾀｯｸﾁｬﾝとの会話に必須です。APIキーの取得方法などの詳細は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。
+※APIキーはｽﾀｯｸﾁｬﾝとの会話に必須です。APIキーの取得方法などの詳細は[AIｽﾀｯｸﾁｬﾝ2のREADME](https://github.com/robo8080/AI_StackChan2_README/)を参照ください。  
+※TTSのmodelやvoiceなどのパラメータ設定は後述の別ファイル（SC_ExConfig.yaml）で行います。
 
 
 フォルダ：/yaml  
@@ -103,9 +105,9 @@ wifi:
   password: "********"
 
 apikey:
-  stt: "********"       # ApiKey of SpeechToText Service (VoiceVox)
+  stt: "********"       # ApiKey of SpeechToText Service (OpenAI / Google Cloud TTSに対応)
   aiservice: "********" # ApiKey of AIService (ChatGPT)
-  tts: "********"       # ApiKey of TextToSpeech Service (Google Cloud TTS)
+  tts: "********"       # ApiKey of TextToSpeech Service (VoiceVox / ElevenLabs/ OpenAIに対応)
 ```
 
 
@@ -130,38 +132,61 @@ servo:
 ※SC_BasicConfig.yamlには他にも様々な基本設定が記述されていますが、現状、本ソフトが対応しているのは上記のPWMサーボピンのみです。
 
 
-### ■Function Calling用設定（任意）
-以下の通り、YAMLファイルでFunction Callingの各機能の設定をします。使わない機能についての設定はブランクでも問題ありません。
+### ■その他、アプリケーション用設定
+YAMLファイルでFunction Callingの各機能の設定をします。使わない機能についての設定はブランクでも問題ありません。  
 
 フォルダ：/app/AiStackChan2FuncCall  
 ファイル名：SC_ExConfig.yaml
+
+
+#### ●TTSの設定（必須）
+TTSの種類（VoiceVox, ElevenLabs, OpenAI TTS）の選択や、モデル、声質を設定します。
+
+```
+tts:
+  type: 0                             # 0:VOICEVOX  1:ElevenLabs  2:OpenAI TTS
+
+  model: ""                           # VOICEVOX (modelは未対応)
+  #model: "eleven_multilingual_v2"    # ElevenLabs
+  #model: "tts-1"                     # OpenAI TTS
+
+  voice: "3"                          # VOICEVOX (ずんだもん)
+  #voice: "AZnzlk1XvdvUeBnXmlld"      # ElevenLabs
+  #voice: "alloy"                     # OpenAI TTS
+
+```
+
+#### ●メール送受信用のGmailアカウント、アプリパスワード（任意）
+メール送受信機能を使う場合に設定が必要です。
+- Gmailアカウントのメールアドレス
+- Gmailアカウントのアプリパスワード（[こちら](https://support.google.com/mail/answer/185833?hl=ja)の説明に沿って取得してください）
+- 送信先のメールアドレス
+
 
 ```
 mail:
   account: "********@gmail.com"    # Gmailアカウントのメールアドレス
   app_pwd: "********"              # Gmailアカウントのアプリパスワード
   to_addr: "********@gmail.com"    # 送信先のメールアドレス
-
-weather:
-  city_id: "140010"     # 天気予報APIのCity ID
-
-news:
-  apikey: "********"    # NewsAPIのAPIキー
 ```
 
-#### ●メール送受信用のGmailアカウント、アプリパスワード
-メール送受信機能を使う場合に設定が必要です。
-- Gmailアカウントのメールアドレス
-- Gmailアカウントのアプリパスワード（[こちら](https://support.google.com/mail/answer/185833?hl=ja)の説明に沿って取得してください）
-- 送信先のメールアドレス
-
-#### ●天気予報のCity ID
+#### ●天気予報のCity ID（任意）
 天気予報機能を使う場合に設定が必要です。  
 City IDは[こちら](https://weather.tsukumijima.net/primary_area.xml)で調べることができます。
 
-#### ●NewsAPIのAPIキー
-　News機能を使う場合に設定が必要です。  
+```
+weather:
+  city_id: "140010"     # 天気予報APIのCity ID
+```
+
+#### ●NewsAPIのAPIキー（任意）
+News機能を使う場合に設定が必要です。  
 APIキーは[NewsAPIのWEBページ](https://newsapi.org/)から取得できます(Developerプランであれば料金はかかりません)。
+
+```
+news:
+  apikey: "********"    # NewsAPIのAPIキー
+```
 
 ### ■Function Calling用のデータファイル（任意）
 
@@ -346,4 +371,9 @@ build_flags=
   - ステータス表示画面を追加。
   - ChatGPTのモデルをGPT4oに変更。
   - Open AI用RootCA証明書を更新。
+- v0.9.0 (開発中、devタグ)
+  - カメラ画像をGPT4oに入力できるようにした。
+  - ElevenLabsとOpenAIのTTSに対応。YAMLファイルでTTSを選択可能とした。
+  - クラス設計をmoddable版ｽﾀｯｸﾁｬﾝを参考に見直した。
+
 
