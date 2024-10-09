@@ -14,7 +14,6 @@
 #if defined( ENABLE_CAMERA )
 #include "driver/Camera.h"
 #endif
-#include "driver/HexLED.h"
 #include "driver/AudioWhisper.h"       //speechToText
 #include "stt/Whisper.h"               //speechToText
 #include "driver/Audio.h"              //speechToText
@@ -36,34 +35,6 @@ extern String OPENAI_API_KEY;   // TODO  Robotに隠蔽したい
 extern String STT_API_KEY;      // TODO  Robotに隠蔽したい
 ///////////////
 
-static bool g_avatar_status = true;
-static void avatar_stop()
-{
-  if(!g_avatar_status)
-    return;
-
-  avatar.suspend();
-  g_avatar_status = false;
-  delay(100);
-  Serial.println("avatar suspended");
-}
-
-static void avatar_resume()
-{
-  if(g_avatar_status)
-    return;
-
-  avatar.resume();
-  Serial.println("avatar resumed");
-  g_avatar_status = true;
-  delay(100);
-}
-
-
-String random_words[18] = {"あなたは誰","楽しい","怒った","可愛い","悲しい","眠い","ジョークを言って","泣きたい","怒ったぞ","こんにちは","お疲れ様","詩を書いて","疲れた","お腹空いた","嫌いだ","苦しい","俳句を作って","歌をうたって"};
-int random_time = -1;
-bool random_speak = true;
-int lastms1 = 0;
 
 static void report_batt_level(){
   char buff[100];
@@ -84,40 +55,11 @@ static void report_batt_level(){
   avatar.setExpression(Expression::Neutral);
 }
 
-static void switch_monologue_mode(){
-    String tmp;
-#if defined(ENABLE_WAKEWORD)
-    mode = 0;
-#endif
-    if(random_speak) {
-      tmp = "独り言始めます。";
-      lastms1 = millis();
-      random_time = 40000 + 1000 * random(30);
-    } else {
-      tmp = "独り言やめます。";
-      random_time = -1;
-    }
-    random_speak = !random_speak;
-    avatar.setExpression(Expression::Happy);
-#if defined(ENABLE_WAKEWORD)
-    mode = 0;
-#endif
-    robot->speech(tmp);
-    delay(1000);
-    avatar.setExpression(Expression::Neutral);
-}
-
 
 static void STT_ChatGPT(const char *base64_buf = NULL) {
   bool prev_servo_home = servo_home;
-  random_speak = true;
-  random_time = -1;
 #ifdef USE_SERVO
   servo_home = true;
-#endif
-
-#if defined( ENABLE_HEX_LED )
-          hex_led_ptn_wake();
 #endif
 
   avatar.setExpression(Expression::Happy);
@@ -138,10 +80,6 @@ static void STT_ChatGPT(const char *base64_buf = NULL) {
   Serial.println("音声認識結果");
   if(ret != "") {
     Serial.println(ret);
-
-#if defined( ENABLE_HEX_LED )
-    hex_led_ptn_accept();
-#endif
     exec_chatGPT(ret, base64_buf);
     avatar.setSpeechText("");
     avatar.setExpression(Expression::Neutral);
@@ -149,11 +87,7 @@ static void STT_ChatGPT(const char *base64_buf = NULL) {
 #if defined(ENABLE_WAKEWORD)
     mode = 0;
 #endif
-
   } else {
-#if defined( ENABLE_HEX_LED )
-    hex_led_ptn_off();
-#endif
     Serial.println("音声認識失敗");
     avatar.setExpression(Expression::Sad);
     avatar.setSpeechText("聞き取れませんでした");
@@ -166,7 +100,7 @@ static void STT_ChatGPT(const char *base64_buf = NULL) {
 
 
 
-AiStackChanMod::AiStackChanMod(void)
+AiStackChanMod::AiStackChanMod()
 {
   box_servo.setupBox(80, 120, 80, 80);
 #if defined(ENABLE_CAMERA)
@@ -179,15 +113,25 @@ AiStackChanMod::AiStackChanMod(void)
   box_BtnC.setupBox(280, 100, 40, 60);
 }
 
+
 void AiStackChanMod::init(void)
 {
-  avatar_resume();
+#if defined(ENABLE_CAMERA)
+  if(isSubWindowON){
+    avatar.set_isSubWindowEnable(true);
+  }
+#endif
 }
 
 void AiStackChanMod::pause(void)
 {
-  avatar_stop();
+#if defined(ENABLE_CAMERA)
+  if(isSubWindowON){
+    avatar.set_isSubWindowEnable(false);
+  }
+#endif
 }
+
 
 void AiStackChanMod::update(int page_no)
 {
@@ -225,8 +169,6 @@ void AiStackChanMod::btnB_longPressed(void)
   delay(1000);
   M5.Speaker.end();
   M5.Mic.begin();
-  random_time = -1;           //独り言停止
-  random_speak = true;
   wakeword_is_enable = false; //wakeword 無効
   mode = -1;
 #ifdef USE_SERVO
@@ -245,7 +187,7 @@ void AiStackChanMod::btnC_pressed(void)
 
 void AiStackChanMod::display_touched(int16_t x, int16_t y)
 {
-  if (box_stt.contain(x, y)/*&&(!mp3->isRunning())*/)
+  if (box_stt.contain(x, y))
   {
     sw_tone();
 #if defined(ENABLE_CAMERA)
@@ -264,7 +206,7 @@ void AiStackChanMod::display_touched(int16_t x, int16_t y)
 #endif
   }
 #ifdef USE_SERVO
-  if (box_servo.contain(t.x, t.y))
+  if (box_servo.contain(x, y))
   {
     //servo_home = !servo_home;
     sw_tone();
@@ -284,13 +226,11 @@ void AiStackChanMod::display_touched(int16_t x, int16_t y)
     avatar.setSpeechText("");
 #else
     sw_tone();
-    switch_monologue_mode();
 #endif
   }
   if (box_BtnC.contain(x, y))
   {
     //sw_tone();
-    change_mod();
   }
 #if defined(ENABLE_CAMERA)
   if (box_subWindow.contain(x, y))
@@ -317,7 +257,6 @@ void AiStackChanMod::idle(void)
       avatar.set_isSubWindowEnable(false);
       sw_tone();
       STT_ChatGPT();                              //音声認識
-      //exec_chatGPT(random_words[random(18)]);   //独り言
 
       // フレームバッファを読み捨てる（ｽﾀｯｸﾁｬﾝが応答した後に、過去のフレームで顔検出してしまうのを防ぐため）
       M5.In_I2C.release();
@@ -342,20 +281,6 @@ void AiStackChanMod::idle(void)
 
 #endif  //ENABLE_CAMERA
 
-
-  /// 独り言 ///
-  static int lastms = 0;
-
-  if (random_time >= 0 && millis() - lastms1 > random_time)
-  {
-    lastms1 = millis();
-    random_time = 40000 + 1000 * random(30);
-
-    exec_chatGPT(random_words[random(18)]);
-#if defined(ENABLE_WAKEWORD)
-    mode = 0;
-#endif    
-  }
 
   /// Wakeword ///
 #if defined(ENABLE_WAKEWORD)
@@ -429,6 +354,7 @@ void AiStackChanMod::idle(void)
     avatar.set_isSubWindowEnable(isSubWindowON);
 #endif  
   }
+
 
 }
 

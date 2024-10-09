@@ -11,13 +11,11 @@
 #include "mod/ModManager.h"
 #include "mod/ModBase.h"
 #include "mod/AiStackChan/AiStackChanMod.h"
+#include "mod/Pomodoro/PomodoroMod.h"
 #include "mod/StatusMonitor/StatusMonitorMod.h"
-#include "mod/FunctionCallingInfo/FunctionCallingInfoMod.h"
+
 
 #include "driver/PlayMP3.h"   //lipSync
-
-#include <ServoEasing.hpp> // https://github.com/ArminJo/ServoEasing       
-//#include "tts/WebVoiceVoxTTS.h"
 
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
@@ -41,10 +39,6 @@
 
 #include "WebAPI.h"
 
-#if defined( ENABLE_HEX_LED )
-#include "driver/HexLED.h"
-#endif
-
 #if defined( ENABLE_CAMERA )
 #include "driver/Camera.h"
 #endif    //ENABLE_CAMERA
@@ -64,13 +58,7 @@
 
 StackchanExConfig system_config;
 Robot* robot;
-ModBase* current_mod;
 
-#define USE_SERVO
-#ifdef USE_SERVO
-int SERVO_PIN_X;
-int SERVO_PIN_Y;
-#endif  // USE_SERVO
 
 // NTP接続情報　NTP connection information.
 const char* NTPSRV      = "ntp.jst.mfeed.ad.jp";    // NTPサーバーアドレス NTP server address.
@@ -78,7 +66,6 @@ const long  GMT_OFFSET  = 9 * 3600;                 // GMT-TOKYO(時差９時間
 const int   DAYLIGHT_OFFSET = 0;                    // サマータイム設定なし No daylight saving time setting
 
 /// 関数プロトタイプ宣言 /// 
-//void exec_chatGPT(String text);
 void check_heap_free_size(void);
 void check_heap_largest_free_block(void);
 
@@ -139,13 +126,6 @@ void StatusCallback(void *cbData, int code, const char *string)
   Serial.flush();
 }
 
-#ifdef USE_SERVO
-#define START_DEGREE_VALUE_X 90
-//#define START_DEGREE_VALUE_Y 90
-#define START_DEGREE_VALUE_Y 85 //
-ServoEasing servo_x;
-ServoEasing servo_y;
-#endif
 
 void lipSync(void *args)
 {
@@ -170,6 +150,7 @@ void lipSync(void *args)
   }
 }
 
+
 void servo(void *args)
 {
   float gazeX, gazeY;
@@ -180,44 +161,14 @@ void servo(void *args)
 #ifdef USE_SERVO
     if(!servo_home)
     {
-    avatar->getGaze(&gazeY, &gazeX);
-    servo_x.setEaseTo(START_DEGREE_VALUE_X + (int)(15.0 * gazeX));
-    if(gazeY < 0) {
-      int tmp = (int)(10.0 * gazeY);
-      if(tmp > 10) tmp = 10;
-      servo_y.setEaseTo(START_DEGREE_VALUE_Y + tmp);
+      avatar->getGaze(&gazeY, &gazeX);
+      robot->servo->moveToGaze((int)(15.0 * gazeX), (int)(10.0 * gazeY));
     } else {
-      servo_y.setEaseTo(START_DEGREE_VALUE_Y + (int)(10.0 * gazeY));
+      robot->servo->moveToOrigin();
     }
-    } else {
-//     avatar->setRotation(gazeX * 5);
-//     float b = avatar->getBreath();
-       servo_x.setEaseTo(START_DEGREE_VALUE_X); 
-//     servo_y.setEaseTo(START_DEGREE_VALUE_Y + b * 5);
-       servo_y.setEaseTo(START_DEGREE_VALUE_Y);
-    }
-    synchronizeAllServosStartAndWaitForAllServosToStop();
 #endif
     delay(50);
   }
-}
-
-void Servo_setup() {
-#ifdef USE_SERVO
-  if (!servo_x.attach(SERVO_PIN_X, START_DEGREE_VALUE_X, DEFAULT_MICROSECONDS_FOR_0_DEGREE, DEFAULT_MICROSECONDS_FOR_180_DEGREE)) {
-    Serial.print("Error attaching servo x");
-  }
-  if (!servo_y.attach(SERVO_PIN_Y, START_DEGREE_VALUE_Y, DEFAULT_MICROSECONDS_FOR_0_DEGREE, DEFAULT_MICROSECONDS_FOR_180_DEGREE)) {
-    Serial.print("Error attaching servo y");
-  }
-  servo_x.setEasingType(EASE_QUADRATIC_IN_OUT);
-  servo_y.setEasingType(EASE_QUADRATIC_IN_OUT);
-  setSpeedForAllServos(30);
-
-  servo_x.setEaseTo(START_DEGREE_VALUE_X); 
-  servo_y.setEaseTo(START_DEGREE_VALUE_Y);
-  synchronizeAllServosStartAndWaitForAllServosToStop();
-#endif
 }
 
 
@@ -297,8 +248,8 @@ ModBase* init_mod(void)
 {
   ModBase* mod;
   add_mod(new AiStackChanMod());
+  add_mod(new PomodoroMod());
   add_mod(new StatusMonitorMod());
-  add_mod(new FunctionCallingInfoMod());
   mod = get_current_mod();
   mod->init();
   return mod;
@@ -312,10 +263,11 @@ void setup()
 //cfg.external_spk_detail.omit_atomic_spk = true; // exclude ATOMIC SPK
 //cfg.external_spk_detail.omit_spk_hat    = true; // exclude SPK HAT
 //  cfg.output_power = true;
+  cfg.serial_baudrate = 115200;   //M5Unified 0.1.17からデフォルトが0になったため設定
   M5.begin(cfg);
 
   /// シリアル出力のログレベルを VERBOSEに設定
-  M5.Log.setLogLevel(m5::log_target_serial, ESP_LOG_VERBOSE);
+  //M5.Log.setLogLevel(m5::log_target_serial, ESP_LOG_VERBOSE);
 
 #if defined(ENABLE_SD_UPDATER)
   // ***** for SD-Updater *********************
@@ -330,7 +282,7 @@ void setup()
 
   {
     auto micConfig = M5.Mic.config();
-    micConfig.stereo = false;
+    //micConfig.stereo = false;
     micConfig.sample_rate = 16000;
     M5.Mic.config(micConfig);
   }
@@ -367,15 +319,6 @@ void setup()
 
     robot = new Robot(system_config);
     // TODO 以降の設定をRobotに集約していく
-
-#ifdef USE_SERVO
-    // Servo
-    SERVO_PIN_X = system_config.getServoInfo(AXIS_X)->pin;
-    SERVO_PIN_Y = system_config.getServoInfo(AXIS_Y)->pin;
-    Serial.printf("Servo pin X:%d, Y:%d\n", SERVO_PIN_X, SERVO_PIN_Y);
-    Servo_setup();
-    delay(1000);
-#endif
 
     // Wifi
     wifi_s* wifi_info = system_config.getWiFiSetting();
@@ -495,12 +438,6 @@ void setup()
   //メール受信設定
   imap_init();
 
-#if defined( ENABLE_HEX_LED )
-  hex_led_init();
-  hex_led_ptn_off();
-  //hex_led_ptn_boot();
-#endif 
-
 #if defined(ENABLE_CAMERA)
   camera_init();
   avatar.set_isSubWindowEnable(true);
@@ -510,7 +447,7 @@ void setup()
   //init_watchdog();
 
   //mod設定
-  current_mod = init_mod();
+  init_mod();
 
 
   //ヒープメモリ残量確認(デバッグ用)
@@ -534,23 +471,22 @@ void loop()
 {
 
   M5.update();
-  current_mod = get_current_mod();
+  ModBase* mod = get_current_mod();
 
   if (M5.BtnA.wasPressed())
   {
-    current_mod->btnA_pressed();
+    mod->btnA_pressed();
   }
 
   if (M5.BtnB.pressedFor(2000))
   {
-    current_mod->btnB_longPressed();
+    mod->btnB_longPressed();
   }
 
   if (M5.BtnC.wasPressed())
   {
-    current_mod->btnC_pressed();
+    mod->btnC_pressed();
   }
-
 
 #if defined(ARDUINO_M5STACK_Core2) || defined( ARDUINO_M5STACK_CORES3 )
   auto count = M5.Touch.getCount();
@@ -559,7 +495,26 @@ void loop()
     auto t = M5.Touch.getDetail();
     if (t.wasPressed())
     {
-      current_mod->display_touched(t.x, t.y);
+      mod->display_touched(t.x, t.y);
+    }
+
+    if (t.wasFlicked())
+    {
+      int16_t dx = t.distanceX();
+      int16_t dy = t.distanceY();
+
+      // detect flick right/left
+      if(abs(dx) >= abs(dy))
+      {
+        if(dx > 0){
+          //Serial.println("Right flicked");
+          change_mod(true);
+        }
+        else{
+          //Serial.println("Left flicked");
+          change_mod();
+        }
+      }
     }
   }
 #endif
@@ -568,17 +523,10 @@ void loop()
   web_server_handle_client();
   ftpSrv.handleFTP();
 
-
-#if defined( ENABLE_HEX_LED )
-  if(recvMessages.size() > 0){
-    hex_led_ptn_notification();
-  }
-#endif
-
   run_schedule();
   //reset_watchdog();
 
-  current_mod->idle();
+  mod->idle();
   
 }
 

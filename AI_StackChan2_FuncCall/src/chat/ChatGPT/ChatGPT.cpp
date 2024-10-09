@@ -9,7 +9,6 @@
 #include "SpiRamJsonDocument.h"
 #include "ChatHistory.h"
 #include "FunctionCall.h"
-#include "driver/HexLED.h"
 #include "Robot.h"
 
 using namespace m5avatar;
@@ -126,15 +125,9 @@ String chatGpt(String json_string, String* calledFunc) {
   String response = "";
   avatar.setExpression(Expression::Doubt);
   avatar.setSpeechText("考え中…");
-#if defined( ENABLE_HEX_LED )  
-  hex_led_ptn_thinking_start();
-#endif
   String ret = https_post_json("https://api.openai.com/v1/chat/completions", json_string.c_str(), root_ca_openai);
   avatar.setExpression(Expression::Neutral);
   avatar.setSpeechText("");
-#if defined( ENABLE_HEX_LED )
-  hex_led_ptn_thinking_end();
-#endif
   Serial.println(ret);
   if(ret != ""){
     DynamicJsonDocument doc(2000);

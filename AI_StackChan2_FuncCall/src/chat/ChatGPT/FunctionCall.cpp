@@ -7,7 +7,6 @@
 #include <SD.h>
 #include <EMailSender.h>
 #include "MailClient.h"
-#include "driver/HexLED.h"
 #include "WakeWord.h"
 #include "Robot.h"
 #include "Scheduler.h"
@@ -645,10 +644,6 @@ String read_mail(void) {
     response = String(recvMessages[0]);
     recvMessages.pop_front();
     prev_nMail = recvMessages.size();
-
-    if(recvMessages.size() == 0){
-      hex_led_ptn_off();
-    }
   }
   else{
     response = "受信メールはありません。";

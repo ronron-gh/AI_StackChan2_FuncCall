@@ -29,7 +29,7 @@ class ModBase{
 protected:
 
 public:
-    ModBase(void) {};
+    ModBase() {};
     virtual void init(void) {};
     virtual void pause(void) {};
     virtual void update(int page_no) {};

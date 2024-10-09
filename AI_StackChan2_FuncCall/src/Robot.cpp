@@ -19,28 +19,36 @@ extern String STT_API_KEY;
 
 Robot::Robot(StackchanExConfig& config)
 {
-
-    //TTS
-    tts_param_t param;
-    api_keys_s* api_key = config.getAPISetting();
-    param.api_key = api_key->tts;
-    param.model = config.getExConfig().tts.model;
-    param.voice = config.getExConfig().tts.voice;
-    int type = config.getExConfig().tts.type;
-    switch(type){
-    case 0:
-        tts = new WebVoiceVoxTTS(param);
-        break;
-    case 1:
-        tts = new ElevenLabsTTS(param);
-        break;
-    case 2:
-        param.api_key = api_key->ai_service;    //API KeyはChatGPTと共通
-        tts = new OpenAITTS(param);
-        break;
-    }
+  //Servo
+  //servo = new StackchanSERVO();
+  servo = new ServoCustom();
+  servo->begin(config.getServoInfo(AXIS_X)->pin, config.getServoInfo(AXIS_X)->start_degree,
+              config.getServoInfo(AXIS_X)->offset,
+              config.getServoInfo(AXIS_Y)->pin, config.getServoInfo(AXIS_Y)->start_degree,
+              config.getServoInfo(AXIS_Y)->offset,
+              (ServoType)config.getServoType());
+  //TTS
+  tts_param_t param;
+  api_keys_s* api_key = config.getAPISetting();
+  param.api_key = api_key->tts;
+  param.model = config.getExConfig().tts.model;
+  param.voice = config.getExConfig().tts.voice;
+  int type = config.getExConfig().tts.type;
+  switch(type){
+  case 0:
+      tts = new WebVoiceVoxTTS(param);
+      break;
+  case 1:
+      tts = new ElevenLabsTTS(param);
+      break;
+  case 2:
+      param.api_key = api_key->ai_service;    //API KeyはChatGPTと共通
+      tts = new OpenAITTS(param);
+      break;
+  }
 
 }
+
 
 
 void Robot::speech(String text)
