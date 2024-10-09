@@ -14,6 +14,12 @@
 
 namespace m5avatar {
 
+typedef enum e_sub_draw_type
+{
+  SUB_DRAW_TYPE_IMG,
+  SUB_DRAW_TYPE_TXT
+} SUB_DRAW_TYPE;
+
 class SubWindow final : public Drawable {
  private:
   uint16_t r;
@@ -23,7 +29,10 @@ class SubWindow final : public Drawable {
   uint32_t subWdWidth, subWdHeight, subWdSize;
   uint16_t* subWdBuf[2];
   uint32_t drawingBufIdx;
+  String subWdTxtBuf;
   bool isDrawEnable;
+  uint16_t drawType;    //画像 or テキスト
+  M5Canvas *spriteTxt;  //テキスト表示用のスプライト
 
  public:
   // constructor
@@ -35,7 +44,8 @@ class SubWindow final : public Drawable {
             DrawContext *drawContext) override;
 
   void set_isDrawEnable(bool _isDrawEnable);
-  void updateBuffer(uint8_t* buf);
+  void updateDrawContentImg(uint8_t* buf);
+  void updateDrawContentTxt(String txt);
 };
 
 }  // namespace m5avatar

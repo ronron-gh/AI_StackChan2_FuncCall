@@ -234,13 +234,28 @@ void Avatar::setBatteryStatus(bool isCharging, int32_t batteryLevel) {
 }
 
 //motoh
-void Avatar::updateSubWindow(uint8_t* buf) {
-  face->subWindow->updateBuffer(buf);
+void Avatar::updateSubWindowImg(uint8_t* buf) {
+  face->subWindow->updateDrawContentImg(buf);
+  face->subWindowPos->setPosition(0, 0);
+  face->subWindowPos->setSize(0, 0);
 }
+
+//motoh
+void Avatar::updateSubWindowTxt(String txt, int top, int left, int width, int height){
+  face->subWindow->updateDrawContentTxt(txt);
+  face->subWindowPos->setPosition(top, left);
+  face->subWindowPos->setSize(width, height);
+}
+  
 
 //motoh
 void Avatar::set_isSubWindowEnable(bool isEnable){
   face->subWindow->set_isDrawEnable(isEnable);
+}
+
+//motoh
+void Avatar::setFaceOffsetX(int16_t offset_x){
+  face->offset_x = offset_x;
 }
 
 }  // namespace m5avatar

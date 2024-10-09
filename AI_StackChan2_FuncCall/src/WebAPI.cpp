@@ -2,9 +2,9 @@
 #include <nvs.h>
 #include "WebAPI.h"
 #include "Avatar.h"
-#include "ChatGPT.h"
-#include "FunctionCall.h"
-#include "WebVoiceVoxTTS.h"
+#include "chat/ChatGPT/ChatGPT.h"
+#include "chat/ChatGPT/FunctionCall.h"
+#include "Robot.h"
 
 using namespace m5avatar;
 extern Avatar avatar;
@@ -148,15 +148,15 @@ void handleNotFound(){
 void handle_speech() {
   String message = server.arg("say");
   String speaker = server.arg("voice");
-  if(speaker != "") {
-    TTS_PARMS = TTS_SPEAKER + speaker;
-  }
+  //if(speaker != "") {
+  //  TTS_PARMS = TTS_SPEAKER + speaker;
+  //}
   Serial.println(message);
   ////////////////////////////////////////
   // 音声の発声
   ////////////////////////////////////////
-  avatar.setExpression(Expression::Happy);
-  Voicevox_tts((char*)message.c_str(), (char*)TTS_PARMS.c_str());
+  //avatar.setExpression(Expression::Happy);
+  robot->speech(message);
   server.send(200, "text/plain", String("OK"));
 }
 
@@ -165,37 +165,21 @@ void handle_chat() {
   // tts_parms_no = 1;
   String text = server.arg("text");
   String speaker = server.arg("voice");
-  if(speaker != "") {
-    TTS_PARMS = TTS_SPEAKER + speaker;
-  }
+  //if(speaker != "") {
+  //  TTS_PARMS = TTS_SPEAKER + speaker;
+  //}
 
   exec_chatGPT(text);
 
   server.send(200, "text/html", String(HEAD)+String("<body>")+response+String("</body>"));
 }
 
-
-/*
-String Role_JSON = "";
-void exec_chatGPT1(String text) {
-  static String response = "";
-  init_chat_doc(Role_JSON.c_str());
-
-  String role = chat_doc["messages"][0]["role"];
-  if(role == "user") {chat_doc["messages"][0]["content"] = text;}
-  String json_string;
-  serializeJson(chat_doc, json_string);
-
-  response = chatGpt(json_string);
-  speech_text = response;
-//  server.send(200, "text/html", String(HEAD)+String("<body>")+response+String("</body>"));
-}
-*/
 void handle_apikey() {
   // ファイルを読み込み、クライアントに送信する
   server.send(200, "text/html", APIKEY_HTML);
 }
 
+#if 0
 void handle_apikey_set() {
   // POST以外は拒否
   if (server.method() != HTTP_POST) {
@@ -224,6 +208,7 @@ void handle_apikey_set() {
   }
   server.send(200, "text/plain", String("OK"));
 }
+#endif
 
 void handle_role() {
   // ファイルを読み込み、クライアントに送信する
@@ -302,6 +287,7 @@ void handle_face() {
   server.send(200, "text/plain", String("OK"));
 }
 
+#if 0
 void handle_setting() {
   String value = server.arg("volume");
   String led = server.arg("led");
@@ -310,6 +296,7 @@ void handle_setting() {
   Serial.println(speaker);
   Serial.println(value);
   size_t speaker_no;
+
   if(speaker != ""){
     speaker_no = speaker.toInt();
     if(speaker_no > 60) {
@@ -339,7 +326,7 @@ void handle_setting() {
   M5.Speaker.setChannelVolume(m5spk_virtual_channel, volume);
   server.send(200, "text/plain", String("OK"));
 }
-
+#endif
 
 void init_web_server(void)
 {
@@ -354,8 +341,8 @@ void init_web_server(void)
   server.on("/face", handle_face);
   server.on("/chat", handle_chat);
   server.on("/apikey", handle_apikey);
-  server.on("/setting", handle_setting);
-  server.on("/apikey_set", HTTP_POST, handle_apikey_set);
+  //server.on("/setting", handle_setting);
+  //server.on("/apikey_set", HTTP_POST, handle_apikey_set);
   server.on("/role", handle_role);
   server.on("/role_set", HTTP_POST, handle_role_set);
   server.on("/role_get", handle_role_get);

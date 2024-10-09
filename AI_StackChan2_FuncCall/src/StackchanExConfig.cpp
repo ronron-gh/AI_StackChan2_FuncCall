@@ -155,6 +155,10 @@ void StackchanExConfig::setExtendSettings(DynamicJsonDocument doc)
     _ex_parameters.weather.city_id  = doc["weather"]["city_id"].as<String>();
     _ex_parameters.news.apikey      = doc["news"]["apikey"].as<String>();
 
+    _ex_parameters.tts.type         = doc["tts"]["type"].as<int>();
+    _ex_parameters.tts.model        = doc["tts"]["model"].as<String>();
+    _ex_parameters.tts.voice        = doc["tts"]["voice"].as<String>();
+
 }
 
 void StackchanExConfig::printExtParameters(void)
@@ -164,4 +168,8 @@ void StackchanExConfig::printExtParameters(void)
     M5_LOGI("mail to addr: %s", _ex_parameters.mail.to_addr.c_str());
     M5_LOGI("weather city id: %s", _ex_parameters.weather.city_id.c_str());
     M5_LOGI("news apikey: %s", _ex_parameters.news.apikey.c_str());
+
+    M5_LOGI("tts type: %d", _ex_parameters.tts.type);
+    M5_LOGI("tts model: %s", _ex_parameters.tts.model.c_str());
+    M5_LOGI("tts voice: %s", _ex_parameters.tts.voice.c_str());
 }

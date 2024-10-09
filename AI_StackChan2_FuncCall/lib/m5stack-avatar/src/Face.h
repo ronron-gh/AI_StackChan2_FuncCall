@@ -29,13 +29,14 @@ class Face {
   BoundingRect *eyeLPos;
   BoundingRect *eyeblowRPos;
   BoundingRect *eyeblowLPos;
-  BoundingRect *subWindowPos;      // motoh
   BoundingRect *boundingRect;
   M5Canvas *sprite;
   M5Canvas *tmpSprite;
 
  public:
   SubWindow *subWindow;        // motoh
+  BoundingRect *subWindowPos;  // motoh
+  int16_t offset_x;            // motoh
 
   // constructor
   Face();
@@ -50,7 +51,7 @@ class Face {
        BoundingRect *eyeRPos, Drawable *eyeL, BoundingRect *eyeLPos,
        Drawable *eyeblowR, BoundingRect *eyeblowRPos, Drawable *eyeblowL,
        BoundingRect *eyeblowLPos,
-       Drawable *subWindow, BoundingRect *subWindowPos,
+       //Drawable *subWindow, BoundingRect *subWindowPos,
        BoundingRect *boundingRect, M5Canvas *spr, M5Canvas *tmpSpr);
   ~Face();
   Face(const Face &other) = default;

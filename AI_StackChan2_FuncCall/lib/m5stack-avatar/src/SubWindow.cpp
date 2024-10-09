@@ -10,9 +10,13 @@ SubWindow::SubWindow() {
   isDrawEnable = false;
   drawingBufIdx = 0;
 
-  LCD_WIDTH = 320;
-  LCD_HEIGHT = 240;
-  RESIZE_RATIO = 3;
+  //LCD_WIDTH = 320;
+  //LCD_HEIGHT = 240;
+  //RESIZE_RATIO = 3;
+
+  LCD_WIDTH = 640;
+  LCD_HEIGHT = 480;
+  RESIZE_RATIO = 6;
 
 //  subWdWidth = 80;    //縮小率1/4
   subWdWidth = 107;    //縮小率1/3
@@ -34,20 +38,51 @@ SubWindow::SubWindow() {
     Serial.println("SubWindow: malloc() failed");    
   }
 #endif
+
+  //テキスト表示用のスプライト
+  spriteTxt = new M5Canvas(&M5.Lcd);
+  if(spriteTxt == nullptr){
+    M5_LOGE("spriteTxt new error");
+  }
 }
 
 
 void SubWindow::draw(M5Canvas *spi, BoundingRect rect, DrawContext *ctx) {
  
   if(isDrawEnable){
-    int x = rect.getLeft();
-    int y = rect.getTop();
-
-    spi->startWrite();
-    spi->setAddrWindow(x, y, subWdWidth, subWdHeight);
-    spi->writePixels((uint16_t*)subWdBuf[drawingBufIdx], subWdSize);
-    spi->endWrite();
-
+    if(drawType == SUB_DRAW_TYPE_IMG){
+      int x = rect.getLeft();
+      int y = rect.getTop();
+      spi->startWrite();
+      spi->setAddrWindow(x, y, subWdWidth, subWdHeight);
+      spi->writePixels((uint16_t*)subWdBuf[drawingBufIdx], subWdSize);
+      spi->endWrite();
+    }
+    else if(drawType == SUB_DRAW_TYPE_TXT){
+      int x = rect.getLeft();
+      int y = rect.getTop();
+      int w = rect.getWidth();
+      int h = rect.getHeight();
+      spriteTxt->setColorDepth(ctx->getColorDepth());
+      spriteTxt->createSprite(M5.Display.width(), M5.Display.height());
+      spriteTxt->setBitmapColor(ctx->getColorPalette()->get(COLOR_PRIMARY),
+        ctx->getColorPalette()->get(COLOR_BACKGROUND));
+      if (ctx->getColorDepth() != 1) {
+        spriteTxt->fillSprite(ctx->getColorPalette()->get(COLOR_BACKGROUND));
+      } else {
+        spriteTxt->fillSprite(0);
+      }
+      //spi->setClipRect(x, y, w, h);
+      spriteTxt->fillRect(0, 0, w, h, BLACK);
+      spriteTxt->setFont(&fonts::lgfxJapanGothic_20);
+      spriteTxt->setTextSize(1);
+      spriteTxt->setTextColor(WHITE, BLACK);
+      spriteTxt->setTextDatum(0);
+      spriteTxt->setCursor(0, 0);
+      spriteTxt->print(subWdTxtBuf);
+      spriteTxt->pushSprite(spi, x, y);
+      spriteTxt->deleteSprite();
+    }
   }
 }
 
@@ -55,13 +90,14 @@ void SubWindow::set_isDrawEnable(bool _isDrawEnable){
   isDrawEnable = _isDrawEnable;
 }
 
-void SubWindow::updateBuffer(uint8_t* src){
+void SubWindow::updateDrawContentImg(uint8_t* src){
 
   uint16_t* resizeBuf;
 
+  drawType = SUB_DRAW_TYPE_IMG;
+
 #if defined(USE_DOUBLE_BUFFER)
   if(drawingBufIdx == 0){
-    resizeBuf = subWdBuf[1];
     resizeBuf = subWdBuf[1];
   }
   else{
@@ -94,6 +130,12 @@ void SubWindow::updateBuffer(uint8_t* src){
     drawingBufIdx = 0;
   }
 #endif
+}
+
+
+void SubWindow::updateDrawContentTxt(String txt){
+  drawType = SUB_DRAW_TYPE_TXT;
+  subWdTxtBuf = txt;
 }
 
 }  // namespace m5avatar

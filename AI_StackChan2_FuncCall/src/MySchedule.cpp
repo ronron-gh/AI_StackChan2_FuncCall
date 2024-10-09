@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "Scheduler.h"
-#include "ChatGPT.h"
-#include "Speech.h"
+#include "chat/ChatGPT/ChatGPT.h"
+#include "Robot.h"
 #include "Expression.h"
 #include <Avatar.h>
 #include "MailClient.h"
@@ -41,7 +41,7 @@ void sched_fn_announce_time(void)
         return;
     }
 
-    speech(String(now_time.tm_hour) + "時です");
+    robot->speech(String(now_time.tm_hour) + "時です");
 }
 
 void sched_fn_recv_mail(void)
@@ -54,7 +54,7 @@ void sched_fn_recv_mail(void)
     int nMail = recvMessages.size();
     if(nMail > prev_nMail){
       prev_nMail = nMail;
-      speech(String(nMail) + "件のメールを受信しています。");
+      robot->speech(String(nMail) + "件のメールを受信しています。");
     }
 }
 

@@ -38,10 +38,18 @@ typedef struct FnNews {
     String apikey;
 } news_s;
 
+typedef struct TTSConf {
+    int type;
+    String model;
+    String voice;
+} tts_s;
+
+
 typedef struct ExConfig {
     mail_s mail;
     weather_s weather;
     news_s news;
+    tts_s tts;
 } ex_config_s;
 
 

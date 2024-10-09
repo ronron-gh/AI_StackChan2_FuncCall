@@ -7,6 +7,9 @@ servo:
     # When using SCS0009, x:RX, y:TX (not used).(StackchanRT Version:Core1 x16,y17, Core2: x13,y14)
     x: 33
     y: 32
+  center:
+    x: 90
+    y: 90
   offset: 
     # Specified by +- from 90 degree during servo initialization
     x: 0

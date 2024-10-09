@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "Scheduler.h"
-#include "Speech.h"
-#include "PlayMP3.h"
+#include "Robot.h"
+#include "driver/PlayMP3.h"
 
 ScheduleBase* scheduleList[MAX_SCHED_NUM] = {nullptr};
 
@@ -179,7 +179,7 @@ void ScheduleReminder::run(struct tm now_time)
             Serial.printf("ScheduleReminder::run callback()\n");
 
             playMP3File("/alarm.mp3");
-            speech(remind_text + "、をリマインドします");
+            robot->speech(remind_text + "、をリマインドします");
 
             is_executed = true;
             destroy = true;

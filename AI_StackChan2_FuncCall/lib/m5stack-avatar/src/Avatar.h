@@ -62,8 +62,10 @@ class Avatar {
   void setBatteryIcon(bool iconStatus);
   void setBatteryStatus(bool isCharging, int32_t batteryLevel);
 
-  void updateSubWindow(uint8_t* buf);         //motoh
+  void updateSubWindowImg(uint8_t* buf);      //motoh
+  void updateSubWindowTxt(String txt, int top = 0, int left = 0, int width = 320, int height = 240);         //motoh
   void set_isSubWindowEnable(bool isEnable);  //motoh
+  void setFaceOffsetX(int16_t offset_x);      //motoh
 };
 
 
