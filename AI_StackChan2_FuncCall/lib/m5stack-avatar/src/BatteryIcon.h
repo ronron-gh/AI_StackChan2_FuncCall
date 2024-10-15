@@ -40,7 +40,8 @@ class BatteryIcon final : public Drawable {
       uint16_t bgColor = ctx->getColorDepth() == 1 ? ERACER_COLOR : ctx->getColorPalette()->get(COLOR_BACKGROUND);
       float offset = ctx->getBreath();
       int32_t batteryLevel = ctx->getBatteryLevel();
-      drawBatteryIcon(spi, 285, 5, primaryColor, bgColor, -offset, ctx->getBatteryIconStatus(), batteryLevel);
+      //drawBatteryIcon(spi, 285, 5, primaryColor, bgColor, -offset, ctx->getBatteryIconStatus(), batteryLevel);
+      drawBatteryIcon(spi, rect.getLeft(), rect.getTop(), primaryColor, bgColor, -offset, ctx->getBatteryIconStatus(), batteryLevel);
     }
   };
 

@@ -29,18 +29,18 @@ class ModBase{
 protected:
 
 public:
-    ModBase() {};
-    virtual void init(void) {};
-    virtual void pause(void) {};
-    virtual void update(int page_no) {};
-    virtual void btnA_pressed(void) {};
-    virtual void btnA_longPressed(void) {};
-    virtual void btnB_pressed(void) {};
-    virtual void btnB_longPressed(void) {};
-    virtual void btnC_pressed(void) {};
-    virtual void btnC_longPressed(void) {};
-    virtual void display_touched(int16_t x, int16_t y) {};
-    virtual void idle(void) {};
+  ModBase() {};
+  virtual void init(void) {};
+  virtual void pause(void) {};
+  virtual void update(int page_no) {};
+  virtual void btnA_pressed(void) {};
+  virtual void btnA_longPressed(void) {};
+  virtual void btnB_pressed(void) {};
+  virtual void btnB_longPressed(void) {};
+  virtual void btnC_pressed(void) {};
+  virtual void btnC_longPressed(void) {};
+  virtual void display_touched(int16_t x, int16_t y) {};
+  virtual void idle(void) {};
 };
 
 

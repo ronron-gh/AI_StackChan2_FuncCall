@@ -169,6 +169,7 @@ ScheduleReminder::ScheduleReminder(int hour, int min, String _remind_text)
 
 }
 
+#include "chat/ChatGPT/FunctionCall.h"
 void ScheduleReminder::run(struct tm now_time)
 {
     int sched = sched_hour * 60 + sched_min;
@@ -178,7 +179,8 @@ void ScheduleReminder::run(struct tm now_time)
         if(!is_executed){
             Serial.printf("ScheduleReminder::run callback()\n");
 
-            playMP3File("/alarm.mp3");
+            String fname = String(APP_DATA_PATH) + String(FNAME_ALARM_MP3);
+            playMP3SD(fname.c_str());
             robot->speech(remind_text + "、をリマインドします");
 
             is_executed = true;

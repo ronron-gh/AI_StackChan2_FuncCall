@@ -8,6 +8,7 @@ namespace m5avatar {
 Balloon b;
 Effect h;
 BatteryIcon battery;
+BoundingRect batteryPos(5, 285);
 BoundingRect br;
 
 Face::Face()
@@ -116,7 +117,7 @@ void Face::draw(DrawContext *ctx) {
   // TODO(meganetaaan): make balloons and effects selectable
   b.draw(sprite, br, ctx);
   h.draw(sprite, br, ctx);
-  battery.draw(sprite, br, ctx);
+  //battery.draw(sprite, br, ctx);  //Rotateしないように、Rotate後に移動  motoh
   // drawAccessory(sprite, position, ctx);
 
   // TODO(meganetaaan): rethink responsibility for transform function
@@ -136,9 +137,15 @@ void Face::draw(DrawContext *ctx) {
     //sprite->pushRotateZoom(tmpSprite, rotation, scale, scale);
     sprite->pushRotateZoom(tmpSprite, M5.Display.width() / 2 + offset_x, M5.Display.height() / 2, rotation, scale, scale);  //motoh
 
+    //Rotateしないようにここでdrawする  motoh
+    rect = batteryPos;
+    rect.setPosition(rect.getTop(), rect.getLeft() + offset_x);
+    battery.draw(tmpSprite, rect, ctx);
+
+    //サブ画面を追加  motoh
     rect = *subWindowPos;
     rect.setPosition(rect.getTop(), rect.getLeft() + offset_x);
-    subWindow->draw(tmpSprite, rect, ctx);    //motoh
+    subWindow->draw(tmpSprite, rect, ctx);
 
     tmpSprite->pushSprite(&M5.Display, 0, 0);
     tmpSprite->deleteSprite();
