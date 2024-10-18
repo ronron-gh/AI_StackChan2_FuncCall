@@ -107,17 +107,14 @@ void PomodoroMod::btnA_pressed(void)
 void PomodoroMod::btnB_pressed(void)
 {
   //MP3再生テスト
-  avatar.setSpeechText("MP3テスト");
+  avatar.setSpeechText("音声テスト");
   if(!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
-    Serial.println("Failed to mount SPIFFS.");
+    Serial.println("Failed to mount SD Card.");
+    return ;
   }
-  else{
-    String fname = String(APP_DATA_PATH) + String("pomodoro1.mp3");
-    playMP3SD(fname.c_str());
-    //robot->speech("時間になりました。");
-  }
+  notification("集中時間終了です", "pomodoro1.mp3");
+  notification("休憩時間終了です", "pomodoro2.mp3");
   avatar.setSpeechText("");
-
 }
 
 void PomodoroMod::btnC_pressed(void)
@@ -129,7 +126,7 @@ void PomodoroMod::btnC_pressed(void)
   else{
     avatar.setSpeechText("無音モード解除");
   }
-  delay(5000);
+  delay(3000);
 }
 
 void PomodoroMod::display_touched(int16_t x, int16_t y)
