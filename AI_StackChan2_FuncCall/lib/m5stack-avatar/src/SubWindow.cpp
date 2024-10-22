@@ -2,7 +2,10 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full
 // license information.
 
+#include <Arduino.h>
+#include <SD.h>
 #include "SubWindow.h"
+//#include "chat/ChatGPT/FunctionCall.h"  //APP_DATA_PATHのため
 
 namespace m5avatar {
 
@@ -19,12 +22,14 @@ SubWindow::SubWindow() {
   RESIZE_RATIO = 6;
 
 //  subWdWidth = 80;    //縮小率1/4
-  subWdWidth = 107;    //縮小率1/3
+//  subWdWidth = 107;    //縮小率1/3
 //  subWdWidth = 160;    //縮小率1/2
+  subWdWidth = 320;    //縮小率1/1
 
 //  subWdHeight = 60;    //縮小率1/4
-  subWdHeight = 80;    //縮小率1/3
+//  subWdHeight = 80;    //縮小率1/3
 //  subWdHeight = 120;    //縮小率1/2
+  subWdHeight = 240;    //縮小率1/1
 
   subWdSize = subWdWidth * subWdHeight;
 
@@ -57,6 +62,31 @@ void SubWindow::draw(M5Canvas *spi, BoundingRect rect, DrawContext *ctx) {
       spi->setAddrWindow(x, y, subWdWidth, subWdHeight);
       spi->writePixels((uint16_t*)subWdBuf[drawingBufIdx], subWdSize);
       spi->endWrite();
+    }
+    else if(drawType == SUB_DRAW_TYPE_JPG){
+      #if 0
+      spriteTxt->setColorDepth(ctx->getColorDepth());
+      spriteTxt->createSprite(subWdWidth, subWdHeight);
+      spriteTxt->setBitmapColor(ctx->getColorPalette()->get(COLOR_PRIMARY),
+        ctx->getColorPalette()->get(COLOR_BACKGROUND));
+      //spriteTxt->fillSprite(GREENYELLOW);
+      spriteTxt->fillRect(0, 0, subWdWidth, subWdHeight, GREENYELLOW);
+      //spriteTxt->drawJpg(jpgBuf, jpgSize, 0, 0);
+      spriteTxt->pushSprite(spi, 0, 0);
+      spriteTxt->deleteSprite();
+      #endif
+      //spi->fillRect(0, 0, subWdWidth, subWdHeight, GREENYELLOW);
+      //spi->drawJpg(jpgBuf, jpgSize, 0, 0, subWdWidth, subWdHeight);
+      
+#if 1      
+      if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+        //String fname = String(APP_DATA_PATH) + "photo/photo001.jpg";
+        spi->drawJpgFile(SD, "/app/AiStackChan2FuncCall/photo/photo001.jpg", 0, 0, subWdWidth, subWdHeight);
+      }
+      else{
+        Serial.println("Failed to load SD card settings. System reset after 5 seconds.");
+      }
+#endif
     }
     else if(drawType == SUB_DRAW_TYPE_TXT){
       int x = rect.getLeft();
@@ -132,6 +162,13 @@ void SubWindow::updateDrawContentImg(uint8_t* src){
 #endif
 }
 
+
+void SubWindow::updateDrawContentJpg(uint8_t* src, int32_t size){
+  drawType = SUB_DRAW_TYPE_JPG;
+  jpgBuf = new uint8_t[size];
+  jpgSize = size;
+  memcpy(jpgBuf, src, size);
+}
 
 void SubWindow::updateDrawContentTxt(String txt){
   drawType = SUB_DRAW_TYPE_TXT;

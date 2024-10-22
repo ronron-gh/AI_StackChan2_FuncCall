@@ -240,6 +240,14 @@ void Avatar::updateSubWindowImg(uint8_t* buf) {
   face->subWindowPos->setSize(0, 0);
 }
 
+
+//motoh
+void Avatar::updateSubWindowJpg(uint8_t* buf, int32_t size) {
+  face->subWindow->updateDrawContentJpg(buf, size);
+  face->subWindowPos->setPosition(0, 0);
+  face->subWindowPos->setSize(0, 0);
+}
+
 //motoh
 void Avatar::updateSubWindowTxt(String txt, int top, int left, int width, int height){
   face->subWindow->updateDrawContentTxt(txt);

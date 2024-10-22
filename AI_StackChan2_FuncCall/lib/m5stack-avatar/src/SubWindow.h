@@ -17,6 +17,7 @@ namespace m5avatar {
 typedef enum e_sub_draw_type
 {
   SUB_DRAW_TYPE_IMG,
+  SUB_DRAW_TYPE_JPG,
   SUB_DRAW_TYPE_TXT
 } SUB_DRAW_TYPE;
 
@@ -29,6 +30,8 @@ class SubWindow final : public Drawable {
   uint32_t subWdWidth, subWdHeight, subWdSize;
   uint16_t* subWdBuf[2];
   uint32_t drawingBufIdx;
+  uint8_t* jpgBuf;
+  int32_t jpgSize;
   String subWdTxtBuf;
   bool isDrawEnable;
   uint16_t drawType;    //画像 or テキスト
@@ -45,6 +48,7 @@ class SubWindow final : public Drawable {
 
   void set_isDrawEnable(bool _isDrawEnable);
   void updateDrawContentImg(uint8_t* buf);
+  void updateDrawContentJpg(uint8_t* src, int32_t size);
   void updateDrawContentTxt(String txt);
 };
 

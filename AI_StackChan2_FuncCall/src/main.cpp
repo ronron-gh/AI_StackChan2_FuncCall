@@ -12,6 +12,7 @@
 #include "mod/ModBase.h"
 #include "mod/AiStackChan/AiStackChanMod.h"
 #include "mod/Pomodoro/PomodoroMod.h"
+#include "mod/PhotoFrame/PhotoFrameMod.h"
 #include "mod/StatusMonitor/StatusMonitorMod.h"
 
 
@@ -244,6 +245,7 @@ ModBase* init_mod(void)
     add_mod(new AiStackChanMod());
   }
   add_mod(new PomodoroMod(isOffline));
+  add_mod(new PhotoFrameMod(isOffline));
   add_mod(new StatusMonitorMod());
   mod = get_current_mod();
   mod->init();
@@ -260,6 +262,20 @@ void setup()
 //  cfg.output_power = true;
   cfg.serial_baudrate = 115200;   //M5Unified 0.1.17からデフォルトが0になったため設定
   M5.begin(cfg);
+
+#if 0
+  if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+    String fname = String(APP_DATA_PATH) + "photo/photo001.jpg";
+    M5.Lcd.drawJpgFile(SD, fname.c_str());
+
+  }
+  else{
+    M5.Lcd.print("Failed to load SD card settings. System reset after 5 seconds.");
+    delay(5000);
+    ESP.restart();
+  }
+  while(1);
+#endif
 
   /// シリアル出力のログレベルを VERBOSEに設定
   //M5.Log.setLogLevel(m5::log_target_serial, ESP_LOG_VERBOSE);
@@ -424,7 +440,8 @@ void setup()
 #if defined(ENABLE_CAMERA)
   avatar.init(16);
 #else
-  avatar.init();
+//  avatar.init();
+  avatar.init(16);
 #endif
   avatar.addTask(lipSync, "lipSync");
   avatar.addTask(servo, "servo");

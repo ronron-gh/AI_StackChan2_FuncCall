@@ -121,3 +121,56 @@ bool copySDFileToSPIFFS(const char *path, bool forced) {
   Serial.println("*** Done. ***\r\n");
   return true;
 }
+
+
+// SDカードのファイルを配列にコピー
+size_t copySDFileToRAM(const char *path, uint8_t *out, int bufSize) {
+  size_t error = 0;
+  Serial.println("Copy SD File to RAM.");
+
+  if (!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+    Serial.println("Failed to mount SD.");
+    return error;
+  }
+
+  File fsrc = SD.open(path, FILE_READ);
+
+  if(!fsrc) {
+    Serial.println("Failed to open file.");
+    return error;
+  }
+
+  uint8_t *buf = new uint8_t[4096];
+  if (!buf) {
+	  Serial.println("Failed to allocate buffer.");
+	  return error;
+  }
+
+  size_t len, size, ret;
+  size = len = fsrc.size();
+  if(bufSize < size){
+	  Serial.println("Output buffer size exceeded.");
+	  return error;
+  }
+
+  while (len) {
+    int outIdx = 0;
+	  size_t s = len;
+	  if (s > 4096){
+		  s = 4096;
+    }  
+
+	  fsrc.read(buf, s);
+    memcpy(&out[outIdx], buf, s);
+    outIdx += s;
+	  len -= s;
+	  Serial.printf("%d / %d\n", size - len, size);
+  }
+ 
+  delete[] buf;
+  fsrc.close();
+
+  Serial.println("*** Done. ***\r\n");
+  return size;
+}
+
