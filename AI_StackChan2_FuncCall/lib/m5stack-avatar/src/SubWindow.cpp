@@ -2,7 +2,10 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full
 // license information.
 
+#include <Arduino.h>
+#include <SD.h>
 #include "SubWindow.h"
+//#include "chat/ChatGPT/FunctionCall.h"  //APP_DATA_PATHのため
 
 namespace m5avatar {
 
@@ -14,6 +17,7 @@ SubWindow::SubWindow() {
   //LCD_HEIGHT = 240;
   //RESIZE_RATIO = 3;
 
+  //GPT-4oに解像度の高い画像を渡したいためキャプチャ時のサイズを2倍にした
   LCD_WIDTH = 640;
   LCD_HEIGHT = 480;
   RESIZE_RATIO = 6;
@@ -44,19 +48,40 @@ SubWindow::SubWindow() {
   if(spriteTxt == nullptr){
     M5_LOGE("spriteTxt new error");
   }
+
+  //JPEG表示用のバッファ
+  JPG_BUF_SIZE = 131072;   //128KB
+  //jpgBuf = new uint8_t[JPG_BUF_SIZE];
+  jpgBuf = nullptr;
+  // SPIRAMから確保するために、ここではnullptrにしておき初回のjpgBuf使用時に確保する。
+  // AvatarをSetup()内でnewするように変更すれば、ここで確保してもSPIRAMから確保できるはず。
 }
 
 
 void SubWindow::draw(M5Canvas *spi, BoundingRect rect, DrawContext *ctx) {
  
   if(isDrawEnable){
-    if(drawType == SUB_DRAW_TYPE_IMG){
+    if(drawType == SUB_DRAW_TYPE_CAM565){
       int x = rect.getLeft();
       int y = rect.getTop();
       spi->startWrite();
       spi->setAddrWindow(x, y, subWdWidth, subWdHeight);
       spi->writePixels((uint16_t*)subWdBuf[drawingBufIdx], subWdSize);
       spi->endWrite();
+    }
+    else if(drawType == SUB_DRAW_TYPE_JPG){
+      int x = rect.getLeft();
+      int y = rect.getTop();
+      spi->drawJpg(jpgBuf, jpgSize, x, y);
+
+#if 0   //SDカードのファイルを直接指定もできるが、描画の度にSDカードから読み込むことになるため非効率   
+      if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+        spi->drawJpgFile(SD, "/app/AiStackChan2FuncCall/photo/photo001.jpg");
+      }
+      else{
+        Serial.println("Failed to load SD card settings. System reset after 5 seconds.");
+      }
+#endif
     }
     else if(drawType == SUB_DRAW_TYPE_TXT){
       int x = rect.getLeft();
@@ -90,11 +115,11 @@ void SubWindow::set_isDrawEnable(bool _isDrawEnable){
   isDrawEnable = _isDrawEnable;
 }
 
-void SubWindow::updateDrawContentImg(uint8_t* src){
+void SubWindow::updateDrawContentCam565(uint8_t* src){
 
   uint16_t* resizeBuf;
 
-  drawType = SUB_DRAW_TYPE_IMG;
+  drawType = SUB_DRAW_TYPE_CAM565;
 
 #if defined(USE_DOUBLE_BUFFER)
   if(drawingBufIdx == 0){
@@ -133,9 +158,105 @@ void SubWindow::updateDrawContentImg(uint8_t* src){
 }
 
 
+bool SubWindow::updateDrawContentJpg(String& fname){
+  bool result;
+  drawType = SUB_DRAW_TYPE_JPG;
+
+  if(jpgBuf == nullptr){
+    jpgBuf = new uint8_t[JPG_BUF_SIZE];
+  }
+
+  for(int i = 0; i < 2; i++){
+    jpgSize = copySDFileToRAM(fname.c_str(), jpgBuf, JPG_BUF_SIZE);
+    if(jpgSize == 0){
+      Serial.println("JPEG load failed");
+      result = false;
+    }
+    else{
+      Serial.printf("JPEG loaded : %s (%d byte)\n", fname.c_str(), jpgSize);
+      result = true;
+      break;
+    }
+  }
+  return result;
+}
+
 void SubWindow::updateDrawContentTxt(String txt){
   drawType = SUB_DRAW_TYPE_TXT;
   subWdTxtBuf = txt;
 }
+
+
+
+// SDカードのファイルを配列にコピー
+size_t SubWindow::copySDFileToRAM(const char *path, uint8_t *out, int outBufSize) {
+  size_t error = 0;
+  size_t readed_size;
+  const int BUF_SIZE = 1024;
+  Serial.println("Copy SD File to RAM.");
+
+  if (!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+    Serial.println("Failed to load SD card settings.");
+    return error;
+  }
+
+  if (!SD.exists(path)) {
+    Serial.println("File doesn't exist.");
+    SD.end();
+    return error;
+  }
+
+  File fsrc = SD.open(path, FILE_READ);
+
+  if(!fsrc) {
+    Serial.println("Failed to open file.");
+    SD.end();
+    return error;
+  }
+
+  uint8_t *buf = new uint8_t[BUF_SIZE];
+  if (!buf) {
+	  Serial.println("Failed to allocate buffer.");
+	  return error;
+  }
+
+  size_t len, size, ret;
+  size = len = fsrc.size();
+  if(outBufSize < size){
+	  Serial.println("Output buffer size exceeded.");
+	  return error;
+  }
+
+  while (len) {
+	  size_t s = len;
+	  if (s > BUF_SIZE){
+		  s = BUF_SIZE;
+    }  
+
+	  if(!fsrc.read(buf, s)){
+      Serial.println("Failed to read file.");
+      SD.end();
+      delete[] buf;
+      return error;
+    }
+    
+    memcpy(out, buf, s);
+    out += s;
+	  len -= s;
+	  Serial.printf("%d / %d\n", size - len, size);
+
+    delay(20); 
+    //このdelayがないと”ff_sd_status(): Check status failed”という
+    //エラーが発生し、以降ファイルオープンできなくなる事象が頻発する。
+    //発生した場合、SDカードをフォーマットしなおさないと復旧できない。
+  }
+
+  delete[] buf;
+  fsrc.close();
+
+  Serial.println("*** Done. ***\r\n");
+  return size;
+}
+
 
 }  // namespace m5avatar

@@ -184,7 +184,7 @@ bool camera_capture_and_face_detect(void){
 #endif  //ENABLE_FACE_DETECT
 
   if(isSubWindowON){
-    avatar.updateSubWindowImg(fb->buf);
+    avatar.updateSubWindowCam565(fb->buf);
   }
 
   //Serial.println("\n<<< heap size before fb return >>>");  

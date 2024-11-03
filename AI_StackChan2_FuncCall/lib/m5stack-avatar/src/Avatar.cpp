@@ -129,7 +129,8 @@ void Avatar::start(int colorDepth) {
   // TODO(meganetaaan): keep handle of these tasks
   xTaskCreate(drawLoop,     /* Function to implement the task */
                           "drawLoop",   /* Name of the task */
-                          2048,         /* Stack size in words */
+//                          2048,         /* Stack size in words */
+                          4096,         /* スプライトでJPEGを表示するとCore 0 panic’edとなるためスタックを増やした */
                           ctx,          /* Task input parameter */
                           1,            /* Priority of the task */
                           &drawTaskHandle);        /* Task handle. */
@@ -234,10 +235,20 @@ void Avatar::setBatteryStatus(bool isCharging, int32_t batteryLevel) {
 }
 
 //motoh
-void Avatar::updateSubWindowImg(uint8_t* buf) {
-  face->subWindow->updateDrawContentImg(buf);
+void Avatar::updateSubWindowCam565(uint8_t* buf) {
+  face->subWindow->updateDrawContentCam565(buf);
   face->subWindowPos->setPosition(0, 0);
   face->subWindowPos->setSize(0, 0);
+}
+
+
+//motoh
+bool Avatar::updateSubWindowJpg(String& fname) {
+  bool result;
+  result = face->subWindow->updateDrawContentJpg(fname);
+  face->subWindowPos->setPosition(0, 0);
+  face->subWindowPos->setSize(0, 0);
+  return result;
 }
 
 //motoh

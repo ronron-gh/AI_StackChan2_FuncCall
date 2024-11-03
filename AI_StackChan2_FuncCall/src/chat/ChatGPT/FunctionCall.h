@@ -10,6 +10,7 @@
 #define FNAME_BUS_TIMETABLE             "bus_timetable.txt"
 #define FNAME_BUS_TIMETABLE_HOLIDAY     "bus_timetable_holiday.txt"
 #define FNAME_BUS_TIMETABLE_SAT         "bus_timetable_sat.txt"
+#define FNAME_ALARM_MP3 "alarm.mp3"
 
 extern String json_ChatString;
 extern TimerHandle_t xAlarmTimer;
