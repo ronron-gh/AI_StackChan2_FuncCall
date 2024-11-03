@@ -51,8 +51,8 @@ ModBase* change_mod(bool reverse)
     modList.push_back(mod);
   }
   mod = modList[0];
-  mod->init();
   avatar.setFaceOffsetX(0);
+  mod->init();
   return mod;
 }
 

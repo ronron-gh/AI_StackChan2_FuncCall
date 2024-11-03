@@ -27,6 +27,7 @@ struct box_t
 
 class ModBase{
 protected:
+  String modName;
 
 public:
   ModBase() {};

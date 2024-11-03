@@ -123,6 +123,7 @@ AiStackChanMod::AiStackChanMod()
 
 void AiStackChanMod::init(void)
 {
+  avatar.setSpeechText("AI Stack-chan");
 #if defined(ENABLE_CAMERA)
   if(isSubWindowON){
     avatar.set_isSubWindowEnable(true);

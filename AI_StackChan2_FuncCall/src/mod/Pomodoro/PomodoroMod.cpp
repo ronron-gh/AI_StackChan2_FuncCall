@@ -55,12 +55,11 @@ PomodoroMod::PomodoroMod(bool _isOffline)
 
 void PomodoroMod::init(void)
 {
-  //avatar_resume();
+  avatar.setSpeechText("Pomodoro Timer");
+  delay(1000);
   xTimer = NULL;
   status = READY;
-  avatarText = "Btn A:スタート/リセット";
   avatar.setSpeechFont(&fonts::efontJA_12);
-  avatar.setSpeechText(avatarText.c_str());
 }
 
 void PomodoroMod::pause(void)
@@ -176,8 +175,7 @@ void PomodoroMod::idle(void)
 
   }
   else{
-    avatarText = "Btn A:スタート/リセット";
-    avatar.setSpeechText(avatarText.c_str());
+    avatar.setSpeechText("Btn A:スタート/リセット");
   }
 
 

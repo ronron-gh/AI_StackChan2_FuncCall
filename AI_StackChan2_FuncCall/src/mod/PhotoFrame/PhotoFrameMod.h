@@ -12,6 +12,10 @@ private:
     box_t box_BtnA;
     box_t box_BtnC;
 
+    File photoRoot;
+
+    TimerHandle_t xTimer;
+
     String avatarText;
     bool isOffline;
 
@@ -26,7 +30,9 @@ public:
     void display_touched(int16_t x, int16_t y);
     void idle(void);
 
-
+    void createPhotoList(File dir);
+    String getNextPhoto();
+    void updatePhoto();
 };
 
 

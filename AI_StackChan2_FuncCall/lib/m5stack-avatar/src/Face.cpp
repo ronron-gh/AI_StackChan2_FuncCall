@@ -136,7 +136,8 @@ void Face::draw(DrawContext *ctx) {
     }
     //sprite->pushRotateZoom(tmpSprite, rotation, scale, scale);
     sprite->pushRotateZoom(tmpSprite, M5.Display.width() / 2 + offset_x, M5.Display.height() / 2, rotation, scale, scale);  //motoh
-
+    sprite->deleteSprite();
+    
     //Rotateしないようにここでdrawする  motoh
     rect = batteryPos;
     rect.setPosition(rect.getTop(), rect.getLeft() + offset_x);
@@ -151,7 +152,8 @@ void Face::draw(DrawContext *ctx) {
     tmpSprite->deleteSprite();
   } else {
     sprite->pushSprite(&M5.Display, boundingRect->getLeft(), boundingRect->getTop());
+    sprite->deleteSprite();
   }
-  sprite->deleteSprite();
+  //sprite->deleteSprite();
 }
 }  // namespace m5avatar
