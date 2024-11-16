@@ -37,6 +37,156 @@ extern String OPENAI_API_KEY;   // TODO  Robotに隠蔽したい
 extern String STT_API_KEY;      // TODO  Robotに隠蔽したい
 ///////////////
 
+#if defined(USE_LLM_MODULE)
+
+#include <M5ModuleLLM.h>
+M5ModuleLLM module_llm;
+
+/* Must be capitalized */
+//String wake_up_keyword = "HI JIMMY";
+String wake_up_keyword = "HI STUCK";
+//String wake_up_keyword = "STOCK JUMP";
+
+String kws_work_id;
+//String asr_work_id;
+String llm_work_id;
+
+void module_llm_setup()
+{
+  //M5.begin();
+  //M5.Display.setTextSize(2);
+  //M5.Display.setTextScroll(true);
+
+  /* Init module serial port */
+  //Serial2.begin(115200, SERIAL_8N1, 16, 17);  // Basic
+    Serial2.begin(115200, SERIAL_8N1, 13, 14);  // Core2
+  // Serial2.begin(115200, SERIAL_8N1, 18, 17);  // CoreS3
+
+  /* Init module */
+  module_llm.begin(&Serial2);
+
+  /* Make sure module is connected */
+  M5.Display.printf(">> Check ModuleLLM connection..\n");
+  while (1) {
+    if (module_llm.checkConnection()) {
+      break;
+    }
+  }
+
+  /* Reset ModuleLLM */
+  M5.Display.printf(">> Reset ModuleLLM..\n");
+  Serial.printf(">> Reset ModuleLLM..\n");
+  module_llm.sys.reset();
+
+  /* Setup Audio module */
+  M5.Display.printf(">> Setup audio..\n");
+  Serial.printf(">> Setup audio..\n");
+  module_llm.audio.setup();
+
+  /* Setup KWS module and save returned work id */
+  M5.Display.printf(">> Setup kws..\n");
+  Serial.printf(">> Setup kws..\n");
+  m5_module_llm::ApiKwsSetupConfig_t kws_config;
+  kws_config.kws = wake_up_keyword;
+  kws_work_id    = module_llm.kws.setup(kws_config);
+
+  /* Setup ASR module and save returned work id */
+  //M5.Display.printf(">> Setup asr..\n");
+  //asr_work_id = module_llm.asr.setup();
+
+  /* Setup LLM module and save returned work id */
+  M5.Display.printf(">> Setup llm..\n");
+  llm_work_id = module_llm.llm.setup();
+
+  //M5.Display.printf(">> Setup ok\n>> Say \"%s\" to wakeup\n", wake_up_keyword.c_str());
+  Serial.printf(">> Setup ok\n>> Say \"%s\" to wakeup\n", wake_up_keyword.c_str());
+}
+
+
+bool check_kws_wakeup()
+{
+  bool is_wakeup = false;
+
+  /* Update ModuleLLM */
+  module_llm.update();
+
+  /* Handle module response messages */
+  for (auto& msg : module_llm.msg.responseMsgList) {
+    /* If KWS module message */
+    if (msg.work_id == kws_work_id) {
+      //M5.Display.setTextColor(TFT_GREENYELLOW);
+      //M5.Display.printf(">> Keyword detected\n");
+      Serial.printf(">> Keyword detected\n");
+      is_wakeup = true;
+    }
+#if 0
+    /* If ASR module message */
+    if (msg.work_id == asr_work_id) {
+      /* Check message object type */
+      if (msg.object == "asr.utf-8.stream") {
+        /* Parse message json and get ASR result */
+        JsonDocument doc;
+        deserializeJson(doc, msg.raw_msg);
+        String asr_result = doc["data"]["delta"].as<String>();
+
+        M5.Display.setTextColor(TFT_YELLOW);
+        M5.Display.printf(">> %s\n", asr_result.c_str());
+      }
+    }
+#endif
+  }
+
+  /* Clear handled messages */
+  module_llm.msg.responseMsgList.clear();
+  return is_wakeup;
+}
+
+void exec_module_llm(String text) {
+  static String response = "";
+  String promptBase = "{\"messages\":[{\"role\": \"system\", \"content\": \"あなたはスタックチャンという名前のアシスタントロボットです.\"}]}";
+
+  Serial.println(promptBase);
+  init_chat_doc(promptBase.c_str());
+
+#if 0 //履歴は厳しそう
+  // 質問をチャット履歴に追加
+  chatHistory.push_back(String("user"), String(""), text);
+
+  for (int i = 0; i < chatHistory.get_size(); i++)
+  {
+    JsonArray messages = chat_doc["messages"];
+    JsonObject systemMessage1 = messages.createNestedObject();
+    systemMessage1["role"] = chatHistory.get_role(i);
+    systemMessage1["content"] = chatHistory.get_content(i);
+  }
+#else
+  JsonArray messages = chat_doc["messages"];
+  JsonObject systemMessage1 = messages.createNestedObject();
+  systemMessage1["role"] = "user";
+  systemMessage1["content"] = text;
+#endif
+
+  String json_string;
+  serializeJson(chat_doc, json_string);
+
+  Serial.println("====================");
+  Serial.println(json_string);
+  Serial.println("====================");
+
+  /* Push question to LLM module and wait inference result */
+  module_llm.llm.inferenceAndWaitResult(llm_work_id, json_string.c_str(), [](String& result) {
+      /* Show result on screen */
+      Serial.printf("inference:%s\n", result.c_str());
+      response += result;
+
+  });
+  Serial.printf("%s\n", response.c_str());
+  chatHistory.push_back(String("assistant"), String(""), response);   // 返答をチャット履歴に追加
+  robot->speech(response);
+  response = "";
+}
+
+#endif  //USE_LLM_MODULE
 
 static void report_batt_level(){
   char buff[100];
@@ -82,7 +232,11 @@ static void STT_ChatGPT(const char *base64_buf = NULL) {
   Serial.println("音声認識結果");
   if(ret != "") {
     Serial.println(ret);
+#if defined(USE_LLM_MODULE)
+    exec_module_llm(ret);
+#else
     exec_chatGPT(ret, base64_buf);
+#endif
     avatar.setSpeechText("");
     avatar.setExpression(Expression::Neutral);
     servo_home = true;
@@ -118,6 +272,10 @@ AiStackChanMod::AiStackChanMod()
   //すでにSPIFFSにファイルがあればコピーはしない。強制的にコピー（上書き）したい場合は第2引数をtrueにする。
   //String fname = String(APP_DATA_PATH) + String(FNAME_ALARM_MP3);
   //copySDFileToSPIFFS(fname.c_str(), false);
+
+#if defined(USE_LLM_MODULE)
+  module_llm_setup();
+#endif
 }
 
 
@@ -292,6 +450,12 @@ void AiStackChanMod::idle(void)
 
   /// Wakeword ///
 #if defined(ENABLE_WAKEWORD)
+#if defined(USE_LLM_MODULE)
+  if( check_kws_wakeup() ){
+    sw_tone();
+    STT_ChatGPT();
+  }
+#else //USE_LLM_MODULE
   if (mode == 0) { /* return; */ }
   else if (mode < 0) {
     int idx = wakeword_regist();
@@ -304,9 +468,7 @@ void AiStackChanMod::idle(void)
       //wakeword_is_enable = false;
       mode = 1;
       wakeword_is_enable = true;
-#ifdef USE_SERVO
-      //servo_home = false;
-#endif
+
     }
   }
   else if (mode > 0 && wakeword_is_enable) {
@@ -333,6 +495,7 @@ void AiStackChanMod::idle(void)
     register_wakeword_required = false;
     
   }
+#endif  //USE_LLM_MODULE
 #endif  //ENABLE_WAKEWORD
 
   /// Alarm ///

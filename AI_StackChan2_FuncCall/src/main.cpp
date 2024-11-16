@@ -15,7 +15,6 @@
 #include "mod/PhotoFrame/PhotoFrameMod.h"
 #include "mod/StatusMonitor/StatusMonitorMod.h"
 
-
 #include "driver/PlayMP3.h"   //lipSync
 
 #include <HTTPClient.h>
@@ -245,12 +244,14 @@ ModBase* init_mod(void)
     add_mod(new AiStackChanMod());
   }
   add_mod(new PomodoroMod(isOffline));
-  add_mod(new PhotoFrameMod(isOffline));
+  //add_mod(new PhotoFrameMod(isOffline));
   add_mod(new StatusMonitorMod());
   mod = get_current_mod();
   mod->init();
   return mod;
 }
+
+
 
 void setup()
 {
@@ -370,7 +371,10 @@ void setup()
     //WiFi.begin();
   }
   
+#if defined(USE_LLM_MODULE)
+  // TODO Configure the role for module llm here
 
+#else   //USE_LLM_MODULE
   // SPIFFSをマウントする
   if(SPIFFS.begin(true)){
     if(!isOffline){
@@ -414,27 +418,30 @@ void setup()
   } else {
     Serial.println("An Error has occurred while mounting SPIFFS");
   }
+#endif  //USE_LLM_MODULE
 
   audioLogger = &Serial;
   mp3_init();
 
 #if defined(ENABLE_WAKEWORD)
+#if defined(USE_LLM_MODULE)
+  // Nothing to initialize here
+#else   //USE_LLM_MODULE
   wakeword_init();
-#endif
+#endif  //USE_LLM_MODULE
+#endif  //ENABLE_WAKEWORD
 
-#if defined(ENABLE_CAMERA)
-  avatar.init(16);
-#else
+  //mod設定
+  init_mod();
+
 //  avatar.init();
   avatar.init(16);
-#endif
+
   avatar.addTask(lipSync, "lipSync");
   avatar.addTask(servo, "servo");
   avatar.setSpeechFont(&fonts::efontJA_16);
 
   M5.Speaker.setVolume(180);
-
-
 
 #if defined(ENABLE_CAMERA)
   camera_init();
@@ -442,9 +449,6 @@ void setup()
 #endif
 
   //init_watchdog();
-
-  //mod設定
-  init_mod();
 
   //ヒープメモリ残量確認(デバッグ用)
   check_heap_free_size();
@@ -462,6 +466,7 @@ void sw_tone(){
   M5.Mic.begin();
 #endif
 }
+
 
 void loop()
 {
