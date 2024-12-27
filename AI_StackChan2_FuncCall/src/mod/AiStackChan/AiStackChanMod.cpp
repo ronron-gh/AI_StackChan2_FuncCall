@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <deque>
+#include <SD.h>
 #include <SPIFFS.h>
 #include "mod/ModManager.h"
 #include "AiStackChanMod.h"
@@ -11,6 +12,7 @@
 #include "driver/PlayMP3.h"
 #include <WiFiClientSecure.h>
 #include "Scheduler.h"
+#include "SDUtil.h"
 #if defined( ENABLE_CAMERA )
 #include "driver/Camera.h"
 #endif
@@ -111,11 +113,17 @@ AiStackChanMod::AiStackChanMod()
 #endif
   box_BtnA.setupBox(0, 100, 40, 60);
   box_BtnC.setupBox(280, 100, 40, 60);
+
+  //SDカードのMP3ファイル（アラーム用）をSPIFFSにコピーする（SDカードだと音が途切れ途切れになるため）。
+  //すでにSPIFFSにファイルがあればコピーはしない。強制的にコピー（上書き）したい場合は第2引数をtrueにする。
+  //String fname = String(APP_DATA_PATH) + String(FNAME_ALARM_MP3);
+  //copySDFileToSPIFFS(fname.c_str(), false);
 }
 
 
 void AiStackChanMod::init(void)
 {
+  avatar.setSpeechText("AI Stack-chan");
 #if defined(ENABLE_CAMERA)
   if(isSubWindowON){
     avatar.set_isSubWindowEnable(true);
@@ -342,12 +350,13 @@ void AiStackChanMod::idle(void)
 #if defined(ENABLE_CAMERA)
     avatar.set_isSubWindowEnable(false);
 #endif    
-    //if(!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
-    if(!SPIFFS.begin(true)){
+    if(!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+    //if(!SPIFFS.begin(true)){
       Serial.println("Failed to mount SPIFFS.");
     }
     else{
-      playMP3File("/alarm.mp3");
+      String fname = String(APP_DATA_PATH) + String(FNAME_ALARM_MP3);
+      playMP3SD(fname.c_str());
       robot->speech("時間になりました。");
     }
 #if defined(ENABLE_CAMERA)

@@ -23,15 +23,21 @@ private:
     PomodoroStatus status;
     String avatarText;
     TimerHandle_t xTimer;
+    bool isOffline;
+    bool isSilentMode;
 public:
-    PomodoroMod();
+    PomodoroMod(bool _isOffline = false);
 
     void init(void);
     void pause(void);
     void btnA_pressed(void);
+    void btnB_pressed(void);
     void btnC_pressed(void);
     void display_touched(int16_t x, int16_t y);
     void idle(void);
+
+private :
+    void notification(String text, String mp3name);
 };
 
 

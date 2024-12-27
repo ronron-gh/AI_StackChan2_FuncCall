@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <deque>
+#include <SD.h>
 #include <SPIFFS.h>
 #include "mod/ModManager.h"
 #include "PomodoroMod.h"
@@ -17,6 +18,7 @@
 #include "rootCA/rootCAgoogle.h"       //speechToText
 #include "driver/Audio.h"              //speechToText
 
+#include "chat/ChatGPT/FunctionCall.h"  //APP_DATA_PATHのため
 
 using namespace m5avatar;
 
@@ -39,7 +41,9 @@ void pomodoroTimerCallback(TimerHandle_t _xTimer){
 }
 
 
-PomodoroMod::PomodoroMod()
+PomodoroMod::PomodoroMod(bool _isOffline)
+  : isOffline{_isOffline},
+    isSilentMode{true}
 {
   box_servo.setupBox(80, 120, 80, 80);
   box_stt.setupBox(0, 0, M5.Display.width(), 60);
@@ -51,12 +55,11 @@ PomodoroMod::PomodoroMod()
 
 void PomodoroMod::init(void)
 {
-  //avatar_resume();
+  avatar.setSpeechText("Pomodoro Timer");
+  delay(1000);
   xTimer = NULL;
   status = READY;
-  avatarText = "Btn A:スタート/リセット";
   avatar.setSpeechFont(&fonts::efontJA_12);
-  avatar.setSpeechText(avatarText.c_str());
 }
 
 void PomodoroMod::pause(void)
@@ -67,6 +70,7 @@ void PomodoroMod::pause(void)
     xTimer = NULL;
     status = READY;
   }
+
   avatar.setSpeechFont(&fonts::efontJA_16);
   avatar.setSpeechText("");
   //avatar_stop();
@@ -99,8 +103,29 @@ void PomodoroMod::btnA_pressed(void)
 }
 
 
+void PomodoroMod::btnB_pressed(void)
+{
+  //MP3再生テスト
+  avatar.setSpeechText("音声テスト");
+  if(!SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+    Serial.println("Failed to mount SD Card.");
+    return ;
+  }
+  notification("集中時間終了です", "pomodoro1.mp3");
+  notification("休憩時間終了です", "pomodoro2.mp3");
+  avatar.setSpeechText("");
+}
+
 void PomodoroMod::btnC_pressed(void)
 {
+  isSilentMode = !isSilentMode;
+  if(isSilentMode){
+    avatar.setSpeechText("無音モード");
+  }
+  else{
+    avatar.setSpeechText("無音モード解除");
+  }
+  delay(3000);
 }
 
 void PomodoroMod::display_touched(int16_t x, int16_t y)
@@ -149,12 +174,15 @@ void PomodoroMod::idle(void)
     }
 
   }
+  else{
+    avatar.setSpeechText("Btn A:スタート/リセット");
+  }
 
 
   if (pomodoroTimerCallbacked) {
     pomodoroTimerCallbacked = false;
     if(status == TIMER25){
-      robot->speech("集中時間終了です。5分間休憩してください。");
+      notification("集中時間終了です", "pomodoro1.mp3");
       xTimer = xTimerCreate("Timer", POMODORO_TIMER_5MIN, pdFALSE, 0, pomodoroTimerCallback);
       if(xTimer != NULL){
         xTimerStart(xTimer, 0);
@@ -170,7 +198,7 @@ void PomodoroMod::idle(void)
       status = TIMER5;
     }
     else if(status == TIMER5){
-      robot->speech("休憩時間終了です。");
+      notification("休憩時間終了です", "pomodoro2.mp3");
       xTimer = xTimerCreate("Timer", POMODORO_TIMER_25MIN, pdFALSE, 0, pomodoroTimerCallback);
       if(xTimer != NULL){
         xTimerStart(xTimer, 0);
@@ -189,3 +217,38 @@ void PomodoroMod::idle(void)
 
 }
 
+
+void PomodoroMod::notification(String text, String mp3name)
+{
+  avatar.setSpeechText(text.c_str());
+  
+  if(isSilentMode){
+    //無音モードならテキストのみ
+    avatar.setExpression(Expression::Happy);
+    servo_home = false;
+    delay(5000);
+    avatar.setExpression(Expression::Neutral);
+    servo_home = true;
+  }
+  else{
+    //mp3があれば再生、なければtts
+    String fname = String(APP_DATA_PATH) + mp3name;
+    bool result = playMP3SD(fname.c_str());
+    if(!result){
+      //mp3がなければtts
+      if(!isOffline){
+        robot->speech("集中時間終了です。5分間休憩してください。");
+      }
+      else{
+        //オフラインモードならttsも無し（テキストのみ）
+        avatar.setExpression(Expression::Happy);
+        servo_home = false;
+        delay(5000);
+        avatar.setExpression(Expression::Neutral);
+        servo_home = true;
+      }
+    }
+
+  }
+
+}

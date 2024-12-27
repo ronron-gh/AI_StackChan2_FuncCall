@@ -16,7 +16,8 @@ namespace m5avatar {
 
 typedef enum e_sub_draw_type
 {
-  SUB_DRAW_TYPE_IMG,
+  SUB_DRAW_TYPE_CAM565,
+  SUB_DRAW_TYPE_JPG,
   SUB_DRAW_TYPE_TXT
 } SUB_DRAW_TYPE;
 
@@ -25,14 +26,24 @@ class SubWindow final : public Drawable {
   uint16_t r;
   bool isLeft;
 
+  //カメラ画像表示用
   int32_t RESIZE_RATIO, LCD_WIDTH, LCD_HEIGHT;
   uint32_t subWdWidth, subWdHeight, subWdSize;
   uint16_t* subWdBuf[2];
   uint32_t drawingBufIdx;
+
+  //JPEG表示用
+  uint32_t JPG_BUF_SIZE;
+  uint8_t* jpgBuf;
+  int32_t jpgSize;
+
+  //テキスト表示用
   String subWdTxtBuf;
   bool isDrawEnable;
   uint16_t drawType;    //画像 or テキスト
   M5Canvas *spriteTxt;  //テキスト表示用のスプライト
+
+  size_t copySDFileToRAM(const char *path, uint8_t *out, int outBufSize);
 
  public:
   // constructor
@@ -44,7 +55,8 @@ class SubWindow final : public Drawable {
             DrawContext *drawContext) override;
 
   void set_isDrawEnable(bool _isDrawEnable);
-  void updateDrawContentImg(uint8_t* buf);
+  void updateDrawContentCam565(uint8_t* buf);
+  bool updateDrawContentJpg(String& fname);
   void updateDrawContentTxt(String txt);
 };
 

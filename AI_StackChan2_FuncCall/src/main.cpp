@@ -12,6 +12,7 @@
 #include "mod/ModBase.h"
 #include "mod/AiStackChan/AiStackChanMod.h"
 #include "mod/Pomodoro/PomodoroMod.h"
+#include "mod/PhotoFrame/PhotoFrameMod.h"
 #include "mod/StatusMonitor/StatusMonitorMod.h"
 
 
@@ -48,16 +49,9 @@
 #include "driver/WatchDog.h"
 #include "SDUpdater.h"
 
-#define USE_SDCARD
-#define WIFI_SSID "SET YOUR WIFI SSID"
-#define WIFI_PASS "SET YOUR WIFI PASS"
-#define OPENAI_APIKEY "SET YOUR OPENAI APIKEY"
-#define VOICEVOX_APIKEY "SET YOUR VOICEVOX APIKEY"
-#define STT_APIKEY "SET YOUR STT APIKEY"
-
-
 StackchanExConfig system_config;
 Robot* robot;
+bool isOffline = false;
 
 
 // NTP接続情報　NTP connection information.
@@ -247,8 +241,11 @@ void time_sync(const char* ntpsrv, long gmt_offset, int daylight_offset) {
 ModBase* init_mod(void)
 {
   ModBase* mod;
-  add_mod(new AiStackChanMod());
-  add_mod(new PomodoroMod());
+  if(!isOffline){
+    add_mod(new AiStackChanMod());
+  }
+  add_mod(new PomodoroMod(isOffline));
+  add_mod(new PhotoFrameMod(isOffline));
   add_mod(new StatusMonitorMod());
   mod = get_current_mod();
   mod->init();
@@ -300,119 +297,123 @@ void setup()
   //M5.Speaker.begin();
 
   M5.Lcd.setTextSize(2);
-  Serial.println("Connecting to WiFi");
-  WiFi.disconnect();
-  WiFi.softAPdisconnect(true);
-  WiFi.mode(WIFI_STA);
-#ifndef USE_SDCARD
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  OPENAI_API_KEY = String(OPENAI_APIKEY);
-  VOICEVOX_API_KEY = String(VOICEVOX_APIKEY);
-  STT_API_KEY = String(STT_APIKEY);
-#else
+
 
   /// settings
   if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
-
     // この関数ですべてのYAMLファイル(Basic, Secret, Extend)を読み込む
     system_config.loadConfig(SD, "/app/AiStackChan2FuncCall/SC_ExConfig.yaml");
 
     robot = new Robot(system_config);
     // TODO 以降の設定をRobotに集約していく
 
-    // Wifi
+    // Wifi設定読み込み
     wifi_s* wifi_info = system_config.getWiFiSetting();
-    Serial.printf("SSID: %s\n",wifi_info->ssid.c_str());
+    Serial.printf("\nSSID: %s\n",wifi_info->ssid.c_str());
     Serial.printf("Key: %s\n",wifi_info->password.c_str());
-    WiFi.begin(wifi_info->ssid.c_str(), wifi_info->password.c_str());
-
-    /// API key
+    // API key読み込み
     api_keys_s* api_key = system_config.getAPISetting();
     OPENAI_API_KEY = api_key->ai_service;
     //VOICEVOX_API_KEY = api_key->tts;
     STT_API_KEY = api_key->stt;
 
-    // Function Call関連の設定
-    init_func_call_settings(&system_config);
+    if(wifi_info->ssid.length() == 0){
+      M5.Lcd.print("Can't get WiFi settings. Start offline mode.\n");
+      isOffline = true;
+    }
+    else{
+      //WiFi設定を読み込めた場合のみネットワーク関連の設定を行う。
+
+      Serial.println("Connecting to WiFi");
+      WiFi.disconnect();
+      WiFi.softAPdisconnect(true);
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(wifi_info->ssid.c_str(), wifi_info->password.c_str());
+      Wifi_setup();
+      M5.Lcd.println("\nConnected");
+      Serial.printf_P(PSTR("Go to http://"));
+      M5.Lcd.print("Go to http://");
+      Serial.println(WiFi.localIP());
+      M5.Lcd.println(WiFi.localIP());
+      delay(1000);
+      
+      //Webサーバ設定
+      init_web_server();
+      
+      //FTPサーバ設定（SPIFFS用）
+      ftpSrv.begin("stackchan","stackchan");    //username, password for ftp.  set ports in ESP8266FtpServer.h  (default 21, 50009 for PASV)
+      Serial.println("FTP server started");
+      M5.Lcd.println("FTP server started");
+
+      //時刻同期
+      time_sync(NTPSRV, GMT_OFFSET, DAYLIGHT_OFFSET);
+  
+      //メール受信設定
+      imap_init();
+
+      //スケジューラ設定
+      init_schedule();
+
+      //ChatGPT用のプロンプトを初期化     TODO これはAiStackChanModでよいかも
+      init_chat_doc(json_ChatString.c_str());
+
+      // Function Call関連の設定
+      init_func_call_settings(&system_config);
+
+    }
 
     //SD.end();
   } else {
-    M5.Lcd.print("Failed to load SD card settings");
-    WiFi.begin();
+    M5.Lcd.print("Failed to load SD card settings. System reset after 5 seconds.");
+    delay(5000);
+    ESP.restart();
+    //WiFi.begin();
   }
   
-#endif  //USE_SDCARD
 
-  M5.Lcd.print("Connecting");
-  Wifi_setup();
-  M5.Lcd.println("\nConnected");
-  Serial.printf_P(PSTR("Go to http://"));
-  M5.Lcd.print("Go to http://");
-  Serial.println(WiFi.localIP());
-  M5.Lcd.println(WiFi.localIP());
-
-  //if (MDNS.begin("m5stack")) {
-  //  Serial.println("MDNS responder started");
-  //  M5.Lcd.println("MDNS responder started");
-  //}
-  delay(1000);
-
-  init_web_server();
-
-  init_chat_doc(json_ChatString.c_str());
   // SPIFFSをマウントする
   if(SPIFFS.begin(true)){
-    // JSONファイルを開く
-    File file = SPIFFS.open("/data.json", "r");
-    if(file){
-      DeserializationError error = deserializeJson(chat_doc, file);
-      if(error){
-        Serial.println("Failed to deserialize JSON. Init doc by default.");
-        init_chat_doc(json_ChatString.c_str());
-      }
-      else{
-        //const char* role = chat_doc["messages"][1]["content"];
-        String role = String((const char*)chat_doc["messages"][1]["content"]);
-        
-        Serial.println(role);
-
-        if (role != "") {
-          init_chat_doc(json_ChatString.c_str());
-          JsonArray messages = chat_doc["messages"];
-          JsonObject systemMessage1 = messages.createNestedObject();
-          systemMessage1["role"] = "system";
-          systemMessage1["content"] = role;
-          //serializeJson(chat_doc, InitBuffer);
-        } else {
+    if(!isOffline){
+      //ロール設定
+      File file = SPIFFS.open("/data.json", "r");
+      if(file){
+        DeserializationError error = deserializeJson(chat_doc, file);
+        if(error){
+          Serial.println("Failed to deserialize JSON. Init doc by default.");
           init_chat_doc(json_ChatString.c_str());
         }
+        else{
+          //const char* role = chat_doc["messages"][1]["content"];
+          String role = String((const char*)chat_doc["messages"][1]["content"]);
+          
+          Serial.println(role);
+
+          if (role != "") {
+            init_chat_doc(json_ChatString.c_str());
+            JsonArray messages = chat_doc["messages"];
+            JsonObject systemMessage1 = messages.createNestedObject();
+            systemMessage1["role"] = "system";
+            systemMessage1["content"] = role;
+            //serializeJson(chat_doc, InitBuffer);
+          } else {
+            init_chat_doc(json_ChatString.c_str());
+          }
+        }
+        serializeJson(chat_doc, InitBuffer);
+        //Role_JSON = InitBuffer;
+        String json_str; 
+        serializeJsonPretty(chat_doc, json_str);  // 文字列をシリアルポートに出力する
+        Serial.println(json_str);
+      } else {
+        Serial.println("Failed to open file for reading");
+        init_chat_doc(json_ChatString.c_str());
       }
-      serializeJson(chat_doc, InitBuffer);
-      //Role_JSON = InitBuffer;
-      String json_str; 
-      serializeJsonPretty(chat_doc, json_str);  // 文字列をシリアルポートに出力する
-      Serial.println(json_str);
-    } else {
-      Serial.println("Failed to open file for reading");
-      init_chat_doc(json_ChatString.c_str());
+
     }
 
   } else {
     Serial.println("An Error has occurred while mounting SPIFFS");
   }
-
-  //SDカードのMP3ファイル（アラーム用）をSPIFFSにコピーする（SDカードだと音が途切れ途切れになるため）。
-  //すでにSPIFFSにファイルがあればコピーはしない。強制的にコピー（上書き）したい場合は第2引数をtrueにする。
-  copySDFileToSPIFFS("/alarm.mp3", false);
-
-  ftpSrv.begin("stackchan","stackchan");    //username, password for ftp.  set ports in ESP8266FtpServer.h  (default 21, 50009 for PASV)
-  Serial.println("FTP server started");
-  M5.Lcd.println("FTP server started");  
-
-
-  Serial.printf_P(PSTR("/ to control the chatGpt Server.\n"));
-  M5.Lcd.print("/ to control the chatGpt Server.\n");
-  delay(3000);
 
   audioLogger = &Serial;
   mp3_init();
@@ -424,7 +425,8 @@ void setup()
 #if defined(ENABLE_CAMERA)
   avatar.init(16);
 #else
-  avatar.init();
+//  avatar.init();
+  avatar.init(16);
 #endif
   avatar.addTask(lipSync, "lipSync");
   avatar.addTask(servo, "servo");
@@ -432,23 +434,17 @@ void setup()
 
   M5.Speaker.setVolume(180);
 
-  //時刻同期
-  time_sync(NTPSRV, GMT_OFFSET, DAYLIGHT_OFFSET);
-  
-  //メール受信設定
-  imap_init();
+
 
 #if defined(ENABLE_CAMERA)
   camera_init();
   avatar.set_isSubWindowEnable(true);
 #endif
 
-  init_schedule();
   //init_watchdog();
 
   //mod設定
   init_mod();
-
 
   //ヒープメモリ残量確認(デバッグ用)
   check_heap_free_size();
@@ -472,10 +468,17 @@ void loop()
 
   M5.update();
   ModBase* mod = get_current_mod();
+  
+  mod->idle();
 
   if (M5.BtnA.wasPressed())
   {
     mod->btnA_pressed();
+  }
+
+  if (M5.BtnB.wasPressed())
+  {
+    mod->btnB_pressed();
   }
 
   if (M5.BtnB.pressedFor(2000))
@@ -519,14 +522,21 @@ void loop()
   }
 #endif
 
+  if(!isOffline){
+    web_server_handle_client();
+    ftpSrv.handleFTP();
+    run_schedule();
+  }
+  
+  if(M5.Power.getBatteryLevel() < 95){
+    avatar.setBatteryIcon(true);
+    avatar.setBatteryStatus(M5.Power.isCharging(), M5.Power.getBatteryLevel());
+  }
+  else{
+    avatar.setBatteryIcon(false);    
+  }
 
-  web_server_handle_client();
-  ftpSrv.handleFTP();
-
-  run_schedule();
   //reset_watchdog();
-
-  mod->idle();
   
 }
 
