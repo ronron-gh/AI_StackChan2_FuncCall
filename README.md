@@ -1,4 +1,4 @@
-**本ソフトは[AI StackChan Ex]()に移行し、より拡張性や汎用性を意識した（つまり、より皆さんの開発のベースとして使っていただきやすい）設計を目指していきます。新たにクローン、フォークする際はAI StackChan Exを選択いただきますよう、よろしくお願いいたします。**
+**本ソフトは[AI StackChan Ex](https://github.com/ronron-gh/AI_StackChan_Ex)に移行し、より拡張性や汎用性を意識した（つまり、より皆さんの開発のベースとして使っていただきやすい）設計を目指していきます。新たにクローン、フォークする際はAI StackChan Exを選択いただきますよう、よろしくお願いいたします。**
 
 # AI_StackChan2_FuncCall
 OpenAIのFunction Callingを使って、robo8080さんの[AIｽﾀｯｸﾁｬﾝ2](https://github.com/robo8080/AI_StackChan2)に様々な機能を追加しました。  
